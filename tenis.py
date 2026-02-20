@@ -1,9 +1,40 @@
-import streamlit as st
 import pandas as pd
 from datetime import datetime
 import os
 import math
+import gspread
+import streamlit as st
+from google.oauth2.service_account import Credentials
 
+
+SHEET_NAME = "tennis_elo_template"
+WORKSHEET = "tennis_elo_template"
+KEYFILE = "teniselo-98a88e562ec1.json"
+
+def get_ws():
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+
+    creds = None
+
+    # Streamlit Cloud (Secrets)
+    try:
+        if "gcp_service_account" in st.secrets:
+            creds = Credentials.from_service_account_info(
+                st.secrets["gcp_service_account"],
+                scopes=scopes
+            )
+    except Exception:
+        creds = None
+
+    # Lokálně (soubor)
+    if creds is None:
+        creds = Credentials.from_service_account_file(KEYFILE, scopes=scopes)
+
+    gc = gspread.authorize(creds)
+    return gc.open(SHEET_NAME).worksheet(WORKSHEET)
 # --- KONFIGURACE ---
 K_SINGLES = 24
 K_DOUBLES = 36
@@ -16,19 +47,34 @@ INITIAL_RATINGS = {
 }
 
 # --- FUNKCE PRO DATA ---
+COLUMNS = ["date", "type", "team_a", "team_b", "winner", "score", "sets", "reason"]
+
 def load_data():
-    if not os.path.exists(CSV_PATH):
-        df = pd.DataFrame(columns=["date", "type", "team_a", "team_b", "winner", "score", "sets", "reason"])
-        df.to_csv(CSV_PATH, index=False)
-        return df
-    return pd.read_csv(CSV_PATH).fillna("")
+    ws = get_ws()
+    values = ws.get_all_values()
+
+    if not values:
+        ws.append_row(COLUMNS)
+        return pd.DataFrame(columns=COLUMNS)
+
+    header = values[0]
+    rows = values[1:]
+    df = pd.DataFrame(rows, columns=header).fillna("")
+
+    # kdyby náhodou někde chyběl sloupec
+    for c in COLUMNS:
+        if c not in df.columns:
+            df[c] = ""
+    return df[COLUMNS]
 
 def save_match(row):
-    df = load_data()
-    new_row = pd.DataFrame([row])
-    df = pd.concat([df, new_row], ignore_index=True)
-    df.to_csv(CSV_PATH, index=False)
+    ws = get_ws()
 
+    # doplň chybějící pole, aby byl vždy stejný tvar
+    full = {c: "" for c in COLUMNS}
+    full.update(row)
+
+    ws.append_row([full[c] for c in COLUMNS], value_input_option="USER_ENTERED")
 def compute_elo():
     ratings = INITIAL_RATINGS.copy()
     df = load_data()
