@@ -190,7 +190,20 @@ def get_all_players():
 # --- UI STREAMLIT ---
 st.set_page_config(page_title="Tennis ELO Žebříček", page_icon="🎾", layout="wide")
 st.title("🎾 Tennis ELO — Zápisy a Žebříček")
-
+st.markdown(
+    """
+    <style>
+    /* centrování buněk i hlaviček ve všech streamlit tabulkách */
+    [data-testid="stDataFrame"] td, 
+    [data-testid="stDataFrame"] th,
+    [data-testid="stDataEditor"] td,
+    [data-testid="stDataEditor"] th {
+        text-align: center !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 # Záložky pro přepínání obsahu
 tab1, tab2, tab3 = st.tabs(["🏆 Žebříček", "✍️ Zadat zápas", "📜 Historie"])
 
@@ -207,7 +220,7 @@ with tab1:
     for p, elo in ratings.items():
         rows.append({
             "Hráč": p,
-            "ELO": round(float(elo), 2),
+            "ELO": int(round(float(elo), 0)),
             "Poslední zápas": last_date.get(p, ""),
             "ELO změna celkem (poslední zápas)": f'{total_delta.get(p, 0):+.0f} ({last_delta.get(p, 0):+.0f})'
         })
