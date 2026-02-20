@@ -235,14 +235,20 @@ with tab1:
     else:
         active_df.insert(0, "#", [])
 
-    st.dataframe(active_df, use_container_width=True)
+    try:
+        st.dataframe(active_df, use_container_width=True, hide_index=True)
+    except TypeError:
+        st.dataframe(active_df.style.hide(axis="index"), use_container_width=True)
 
     st.subheader("Hráči bez zápasu za posledních 30 dní")
     if inactive_df.empty:
         st.write("Nikdo.")
     else:
         inactive_df.insert(0, "#", ["unranked"] * len(inactive_df))
-        st.dataframe(inactive_df, use_container_width=True)
+        try:
+            st.dataframe(inactive_df, use_container_width=True, hide_index=True)
+        except TypeError:
+            st.dataframe(inactive_df.style.hide(axis="index"), use_container_width=True)
 
 
 # --- TAB 2: ZADÁNÍ ZÁPASU ---
@@ -333,4 +339,7 @@ with tab3:
     st.header("Kompletní historie zápasů")
     df_hist = load_data()
     # Zobrazení od nejnovějšího
-    st.dataframe(df_hist.iloc[::-1], use_container_width=True)
+    try:
+        st.dataframe(df_hist.iloc[::-1], use_container_width=True, hide_index=True)
+    except TypeError:
+        st.dataframe(df_hist.iloc[::-1].style.hide(axis="index"), use_container_width=True)
