@@ -19,7 +19,7 @@ def get_ws():
 
     creds = None
 
-    # Streamlit Cloud (Secrets)
+    # Streamlit Cloud (Secrets) cus
     try:
         if "gcp_service_account" in st.secrets:
             creds = Credentials.from_service_account_info(
@@ -31,10 +31,15 @@ def get_ws():
 
     # Lokálně (soubor)
     if creds is None:
+        if not os.path.exists(KEYFILE):
+            st.error("Chybí Streamlit Secrets (gcp_service_account) a lokální KEYFILE neexistuje.")
+            st.stop()
         creds = Credentials.from_service_account_file(KEYFILE, scopes=scopes)
 
     gc = gspread.authorize(creds)
     return gc.open(SHEET_NAME).worksheet(WORKSHEET)
+
+
 # --- KONFIGURACE ---
 K_SINGLES = 24
 K_DOUBLES = 36
