@@ -1,0 +1,32 @@
+date,type,team_a,team_b,winner,score,sets,reason
+22.10.2025,adjust,Tobi,+0,,,,Přidání hráče(1200 ELO)
+22.10.2025,adjust,Kuba,+0,,,,Přidání hráče(1100 ELO)
+22.10.2025,adjust,Jirka,+0,,,,Přidání hráče(1040 ELO)
+22.10.2025,adjust,Kávič,+0,,,,Přidání hráče(1040 ELO)
+22.10.2025,adjust,Ríša,+0,,,,Přidání hráče(1030 ELO)
+22.10.2025,adjust,Novas,+0,,,,Přidání hráče(1030 ELO)
+23.10.2025,doubles,Tobi+Ríša,Kuba+Jirka,B,1:2,,
+03.11.2025,doubles,Tobi+Novas,Jirka+Kuba,A,2:1,,
+05.11.2025,doubles,Tobi+Ríša,Kávič+Novas,A,2:1,,
+10.11.2025,singles,Kávič,Novas,A,3:0,,
+10.11.2025,doubles,Tobi+Ríša,Kuba+Jirka,B,1:2,,
+10.11.2025,adjust,Jirka,2,,,,2xEso
+10.11.2025,adjust,Danda,-100,,,,Přidání hráče (900 ELO)
+11.11.2025,adjust,Kuba,-1,,,,Remíza s Novasem
+11.11.2025,adjust,Novas,1,,,,Remíza s Kubou
+11.11.2025,friendly_singles,Tobi,Danda,A,1:0,0,
+12.11.2025,friendly_singles,Tobi,Ríša,A,3:0,"0,0,1",
+18.11.2025,adjust,Jirka,1,,,,1xEso
+18.11.2025,doubles,Tobi+Ríša,Kuba+Jirka,A,2:0,"6,6",
+24.11.2025,doubles,Tobi+Ríša,Kuba+Jirka,B,0:2,"-4,-4",
+01.12.2025,adjust,Kávič,1,,,,Elitní eso
+01.12.2025,doubles,Tobi+Kávič,Jirka+Kuba,A,2:0,"4,4",
+4.12.2025,singles,Kuba,Novas,A,2:0,"6,0",
+8.12.2025,doubles,Jirka+Kávič,Tobi+Novas,A,2:1,"5,-2,3",
+15.12.2025,singles,Kávič,Novas,A,2:0,"0,1",
+15.12.2025,singles,Kávič,Ríša,A,2:0,"1,2",
+12.1.2026,doubles,Tobi+Ríša,Kávič+Kuba,B,1:2,"3,-2,3",
+14.1.2026,doubles,Tobi+Ríša,Kuba+Kávič,A,2:1,"2,3,-5",
+14.01.2026,adjust,Tobi,-1,,,,Sázka o elo v posledním setu
+21.1.2026,doubles,Tobi+Ríša,Kuba+Jirka,B,0:2,"-3,-6",
+22.1.2026,doubles,Tobi+Ríša,Jirka+Kuba,B,0:3,"-1,-4,-1",
