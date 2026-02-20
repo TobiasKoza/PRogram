@@ -11,6 +11,7 @@ SHEET_NAME = "tennis_elo_template"
 WORKSHEET = "tennis_elo_template"
 KEYFILE = "teniselo-98a88e562ec1.json"
 
+@st.cache_resource
 def get_ws():
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
@@ -19,7 +20,7 @@ def get_ws():
 
     creds = None
 
-    # Streamlit Cloud (Secrets) cus
+    # Streamlit Cloud (Secrets)
     try:
         if "gcp_service_account" in st.secrets:
             creds = Credentials.from_service_account_info(
@@ -37,7 +38,8 @@ def get_ws():
         creds = Credentials.from_service_account_file(KEYFILE, scopes=scopes)
 
     gc = gspread.authorize(creds)
-    return gc.open(SHEET_NAME).worksheet(WORKSHEET)
+    sh = gc.open(SHEET_NAME)
+    return sh.worksheet(WORKSHEET)
 
 
 # --- KONFIGURACE ---
@@ -82,9 +84,18 @@ def save_match(row):
     ws.append_row([full[c] for c in COLUMNS], value_input_option="USER_ENTERED")
 from datetime import datetime, date, timedelta
 
+import time
+
 def delete_sheet_row(sheet_row: int):
     ws = get_ws()
-    ws.delete_rows(sheet_row)
+    for attempt in range(3):
+        try:
+            ws.delete_rows(sheet_row)
+            return
+        except gspread.exceptions.APIError:
+            if attempt == 2:
+                raise
+            time.sleep(0.8 * (attempt + 1))
 
 def compute_elo_with_meta():
     ratings = INITIAL_RATINGS.copy()
