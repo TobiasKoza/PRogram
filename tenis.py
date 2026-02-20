@@ -193,11 +193,11 @@ st.title("🎾 Tennis ELO — Zápisy a Žebříček")
 st.markdown(
     """
     <style>
-    /* centrování buněk i hlaviček ve všech streamlit tabulkách */
-    [data-testid="stDataFrame"] td, 
-    [data-testid="stDataFrame"] th,
-    [data-testid="stDataEditor"] td,
-    [data-testid="stDataEditor"] th {
+    /* centrum pro text v buňkách i v hlavičkách */
+    div[data-testid="stDataFrame"] table td,
+    div[data-testid="stDataFrame"] table th,
+    div[data-testid="stDataEditor"] table td,
+    div[data-testid="stDataEditor"] table th {
         text-align: center !important;
     }
     </style>
