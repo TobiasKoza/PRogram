@@ -82,6 +82,9 @@ def save_match(row):
     ws.append_row([full[c] for c in COLUMNS], value_input_option="USER_ENTERED")
 from datetime import datetime, date, timedelta
 
+def delete_sheet_row(sheet_row: int):
+    ws = get_ws()
+    ws.delete_rows(sheet_row)
 
 def compute_elo_with_meta():
     ratings = INITIAL_RATINGS.copy()
@@ -235,20 +238,28 @@ with tab1:
     else:
         active_df.insert(0, "#", [])
 
+    sty = active_df.style.set_properties(**{"text-align": "center"}).set_table_styles(
+    [{"selector": "th", "props": [("text-align", "center")]}]
+)
+
     try:
-        st.dataframe(active_df, use_container_width=True, hide_index=True)
+        st.dataframe(sty, use_container_width=True, hide_index=True)
     except TypeError:
-        st.dataframe(active_df.style.hide(axis="index"), use_container_width=True)
+        st.dataframe(sty.hide(axis="index"), use_container_width=True)
 
     st.subheader("Hráči bez zápasu za posledních 30 dní")
     if inactive_df.empty:
         st.write("Nikdo.")
     else:
         inactive_df.insert(0, "#", ["unranked"] * len(inactive_df))
-        try:
-            st.dataframe(inactive_df, use_container_width=True, hide_index=True)
-        except TypeError:
-            st.dataframe(inactive_df.style.hide(axis="index"), use_container_width=True)
+        sty = inactive_df.style.set_properties(**{"text-align": "center"}).set_table_styles(
+    [{"selector": "th", "props": [("text-align", "center")]}]
+)
+
+    try:
+        st.dataframe(sty, use_container_width=True, hide_index=True)
+    except TypeError:
+        st.dataframe(sty.hide(axis="index"), use_container_width=True)
 
 
 # --- TAB 2: ZADÁNÍ ZÁPASU ---
@@ -337,9 +348,55 @@ with tab2:
 # --- TAB 3: HISTORIE ---
 with tab3:
     st.header("Kompletní historie zápasů")
+
     df_hist = load_data()
-    # Zobrazení od nejnovějšího
-    try:
-        st.dataframe(df_hist.iloc[::-1], use_container_width=True, hide_index=True)
-    except TypeError:
-        st.dataframe(df_hist.iloc[::-1].style.hide(axis="index"), use_container_width=True)
+
+    if df_hist.empty:
+        st.info("Historie je prázdná.")
+    else:
+        # přidej číslo řádku v Google Sheetu (1 = hlavička, data začínají na řádku 2)
+        df_hist = df_hist.copy()
+        df_hist["_sheet_row"] = range(2, len(df_hist) + 2)
+
+        # view od nejnovějšího
+        view = df_hist.iloc[::-1].reset_index(drop=True)
+
+        # výběr zápasu ke smazání
+        def _label(r):
+            ta = str(r["team_a"])
+            tb = str(r["team_b"])
+            dt = str(r["date"])
+            tp = str(r["type"])
+            wn = str(r.get("winner", ""))
+            sc = str(r.get("score", ""))
+            return f"{dt} | {tp} | {ta} vs {tb} | W:{wn} | {sc}"
+
+        options = list(view.index)
+        sel = st.selectbox(
+            "Vyber zápas k odstranění",
+            options=options,
+            format_func=lambda i: _label(view.loc[i]),
+        )
+
+        colA, colB = st.columns([1, 3])
+        with colA:
+            confirm = st.checkbox("Potvrzuji smazání", value=False)
+
+        with colB:
+            if st.button("🗑️ Smazat vybraný zápas a přepočítat ELO", use_container_width=True, disabled=not confirm):
+                sheet_row = int(view.loc[sel, "_sheet_row"])
+                delete_sheet_row(sheet_row)
+                st.success("Smazáno. ELO se přepočítalo z historie.")
+                st.rerun()
+
+        # tabulka historie bez levého indexu + bez pomocného sloupce
+        show = view.drop(columns=["_sheet_row"])
+
+        sty = show.style.set_properties(**{"text-align": "center"}).set_table_styles(
+            [{"selector": "th", "props": [("text-align", "center")]}]
+        )
+
+        try:
+            st.dataframe(sty, use_container_width=True, hide_index=True)
+        except TypeError:
+            st.dataframe(sty.hide(axis="index"), use_container_width=True)
