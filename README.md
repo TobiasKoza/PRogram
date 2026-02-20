@@ -1,1 +1,4 @@
 # PRogram
+
+streamlit
+pandas
