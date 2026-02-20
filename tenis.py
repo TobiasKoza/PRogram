@@ -86,6 +86,8 @@ from datetime import datetime, date, timedelta
 def compute_elo_with_meta():
     ratings = INITIAL_RATINGS.copy()
     df = load_data()
+    # baseline (startovní ELO) – pro výpočet "ELO změna celkem"
+    base_rating = {p: float(v) for p, v in INITIAL_RATINGS.items()}
 
     # pro hráče, co nejsou v INITIAL_RATINGS
     def initial_for(p: str) -> float:
@@ -103,13 +105,28 @@ def compute_elo_with_meta():
             p = str(r.get("team_a", "")).strip()
             if not p:
                 continue
+
+            reason = str(r.get("reason", "")).strip()
+
             try:
                 delta = float(r.get("team_b", 0) or 0)
             except:
                 delta = 0.0
 
-            ratings[p] = ratings.get(p, initial_for(p)) + delta
-            last_delta[p] = delta
+            # default baseline pro hráče, který ještě nemá
+            if p not in base_rating:
+                base_rating[p] = initial_for(p)
+
+            ratings[p] = ratings.get(p, base_rating[p]) + delta
+
+            # Pokud je to "Přidání hráče(...)", ber to jako nastavení startu (baseline),
+            # ne jako "změnu" do statistik
+            if reason.startswith("Přidání hráče"):
+                base_rating[p] = float(ratings[p])      # start = aktuální rating po adjustu
+                last_delta[p] = 0.0                     # poslední změna = 0
+            else:
+                last_delta[p] = float(delta)
+
             last_date[p] = str(r.get("date", "")).strip()
             continue
 
@@ -146,8 +163,9 @@ def compute_elo_with_meta():
                 last_date[p] = str(r.get("date", "")).strip()
                 played_elo_match.add(p)
 
-    # total delta proti startu
-    total_delta = {p: (ratings[p] - initial_for(p)) for p in ratings.keys()}
+    # total delta proti startu (baseline)
+    total_delta = {p: (float(ratings[p]) - float(base_rating.get(p, initial_for(p))))
+                   for p in ratings.keys()}
 
     return ratings, last_date, total_delta, last_delta, played_elo_match
 
