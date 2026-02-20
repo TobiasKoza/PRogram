@@ -152,7 +152,7 @@ def compute_elo_with_meta():
     return ratings, last_date, total_delta, last_delta, played_elo_match
 
 def get_all_players():
-    ratings = compute_elo()
+    ratings = compute_elo_with_meta()
     return sorted(list(ratings.keys()))
 
 # --- UI STREAMLIT ---
