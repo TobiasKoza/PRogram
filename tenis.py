@@ -193,11 +193,17 @@ st.title("🎾 Tennis ELO — Zápisy a Žebříček")
 st.markdown(
     """
     <style>
-    /* centrum pro text v buňkách i v hlavičkách */
+    /* st.dataframe() je grid, ne table -> centrovat grid buňky i hlavičky */
+    div[data-testid="stDataFrame"] [role="gridcell"],
+    div[data-testid="stDataFrame"] [role="columnheader"],
+    div[data-testid="stDataFrame"] [role="rowheader"] {
+        justify-content: center !important;
+        text-align: center !important;
+    }
+
+    /* fallback pro starší render (kdyby někde byl table) */
     div[data-testid="stDataFrame"] table td,
-    div[data-testid="stDataFrame"] table th,
-    div[data-testid="stDataEditor"] table td,
-    div[data-testid="stDataEditor"] table th {
+    div[data-testid="stDataFrame"] table th {
         text-align: center !important;
     }
     </style>
