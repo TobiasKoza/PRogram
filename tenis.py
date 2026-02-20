@@ -73,12 +73,17 @@ def load_data():
     return df[COLUMNS]
 
 def save_match(row):
-    df = load_data()
-    new_row = pd.DataFrame([row])
-    df = pd.concat([df, new_row], ignore_index=True)
-    df.to_csv(CSV_PATH, index=False)
+    ws = get_ws()
 
-def compute_elo():
+    # doplň chybějící pole, aby byl vždy stejný tvar
+    full = {c: "" for c in COLUMNS}
+    full.update(row)
+
+    ws.append_row([full[c] for c in COLUMNS], value_input_option="USER_ENTERED")
+from datetime import datetime, date, timedelta
+
+
+def compute_elo_with_meta():
     ratings = INITIAL_RATINGS.copy()
     df = load_data()
 
