@@ -422,7 +422,8 @@ with tab2:
     with col2:
         st.write("") # Odsazení
         st.write("")
-        winner = st.selectbox("Vítěz", ["A", "B"], format_func=lambda x: "Tým/Hráč A" if x=="A" else "Tým/Hráč B")
+        # V selectboxu se zobrazí konkrétní jména, ale do kódu se uloží jen "A" nebo "B"
+        winner = st.selectbox("Vítěz", ["A", "B"], format_func=lambda x: team_a if x == "A" else team_b)
         score = st.text_input("Skóre (např. 2:1)", "")
         sets = st.text_input("Gemy setů (např. 6,4,6)", "")
         
