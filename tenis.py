@@ -81,11 +81,13 @@ def compute_elo_with_meta():
     ratings = INITIAL_RATINGS.copy()
     df = load_data()
 
-    # meta
-    last_date = {p: None for p in ratings}
-    total_delta = {p: 0.0 for p in ratings}
-    last_delta = {p: 0.0 for p in ratings}
-    played_elo_match = {p: False for p in ratings}
+    # startovní ELO pro výpočet total_delta
+    base = {p: float(v) for p, v in ratings.items()}
+
+    last_date = {}          # poslední zápas (singles/doubles/friendly)
+    total_delta = {}        # finální - start
+    last_delta = {}         # poslední změna (ranked/adjust; friendly=0)
+    played_elo_match = {}   # měl někdy ranked match (singles/doubles)
 
     def parse_team(s: str):
         return [x.strip() for x in str(s).split("+") if x.strip()]
@@ -96,11 +98,18 @@ def compute_elo_with_meta():
         except:
             return None
 
+    def ensure_player(p: str):
+        ratings.setdefault(p, 1000.0)
+        base.setdefault(p, 1000.0)
+        last_date.setdefault(p, None)
+        last_delta.setdefault(p, 0.0)
+        played_elo_match.setdefault(p, False)
+
     for _, r in df.iterrows():
         rtype = str(r.get("type", "")).strip()
         d = parse_date(r.get("date", ""))
 
-        # adjust
+        # --- adjust ---
         if rtype == "adjust":
             p = str(r.get("team_a", "")).strip()
             try:
@@ -108,149 +117,34 @@ def compute_elo_with_meta():
             except:
                 delta = 0.0
 
-            ratings.setdefault(p, 1000.0)
-            last_date.setdefault(p, None)
-            total_delta.setdefault(p, 0.0)
-            last_delta.setdefault(p, 0.0)
-            played_elo_match.setdefault(p, False)
-
+            ensure_player(p)
             ratings[p] += delta
-            total_delta[p] += delta
             last_delta[p] = delta
             if d:
                 last_date[p] = d
             continue
 
-        # matches (ranked)
+        # --- friendly ---
+        if rtype in ["friendly_singles", "friendly_doubles"]:
+            team_a = parse_team(r.get("team_a", ""))
+            team_b = parse_team(r.get("team_b", ""))
+
+            for p in team_a + team_b:
+                ensure_player(p)
+                last_delta[p] = 0.0
+                if d:
+                    last_date[p] = d
+            continue
+
+        # --- ranked matches ---
         if rtype in ["singles", "doubles"]:
             team_a = parse_team(r.get("team_a", ""))
             team_b = parse_team(r.get("team_b", ""))
             winner = str(r.get("winner", "")).strip()
 
             for p in team_a + team_b:
-                ratings.setdefault(p, 1000.0)
-                last_date.setdefault(p, None)
-                total_delta.setdefault(p, 0.0)
-                last_delta.setdefault(p, 0.0)
-                played_elo_match.setdefault(p, False)
+                ensure_player(p)
 
-            ra = sum(ratings[p] for p in team_a) / len(team_a)
-            rb = sum(ratings[p] for p in team_b) / len(team_b)
-            ea = 1.0 / (1.0 + 10 ** ((rb - ra) / SCALE))
-            sa = 1.0 if winner == "A" else 0.0
-
-            k = K_SINGLES if rtype == "singles" else K_DOUBLES
-            delta = k * (sa - ea)
-
-            # před update
-            before = {p: ratings[p] for p in team_a + team_b}
-
-            for p in team_a:
-                ratings[p] += delta / len(team_a)
-            for p in team_b:
-                ratings[p] -= delta / len(team_b)
-
-            # after + meta
-            for p in team_a + team_b:
-                ch = ratings[p] - before[p]
-                total_delta[p] += ch
-                last_delta[p] = ch
-                played_elo_match[p] = True
-                if d:
-                    last_date[p] = d
-            continue
-
-        # friendly -> jen aktualizace posledního zápasu (bez ELO změn)
-        if rtype in ["friendly_singles", "friendly_doubles"]:
-            team_a = parse_team(r.get("team_a", ""))
-            team_b = parse_team(r.get("team_b", ""))
-            for p in team_a + team_b:
-                ratings.setdefault(p, 1000.0)
-                last_date.setdefault(p, None)
-                total_delta.setdefault(p, 0.0)
-                last_delta.setdefault(p, 0.0)
-                played_elo_match.setdefault(p, False)
-                if d:
-                    last_date[p] = d
-
-    return ratings, last_date, total_delta, last_delta, played_elo_match
-
-def parse_ddmmyyyy(s: str):
-    s = str(s or "").strip()
-    try:
-        return datetime.strptime(s, "%d.%m.%Y").date()
-    except:
-        return None
-
-MATCH_TYPES = {"singles", "doubles", "friendly_singles", "friendly_doubles"}
-
-def compute_elo_with_meta():
-    """
-    ratings: finální ELO
-    last_match: poslední datum zápasu (jen match typy, ne adjust)
-    total_change: finální - startovní (start = INITIAL_RATINGS nebo 1000)
-    last_delta: změna ELO v poslední akci hráče (match/adjust; friendly=0)
-    """
-    ratings = INITIAL_RATINGS.copy()
-    base = {}  # startovní ELO pro každého hráče (pro total_change)
-    for p, v in ratings.items():
-        base[p] = float(v)
-
-    last_match = {}   # jen zápasy (MATCH_TYPES)
-    last_delta = {}   # poslední změna (match/adjust/friendly)
-
-    df = load_data()
-
-    for _, r in df.iterrows():
-        rtype = str(r.get("type", "")).strip()
-        date_s = str(r.get("date", "")).strip()
-        d = parse_ddmmyyyy(date_s)
-
-        team_a_raw = str(r.get("team_a", "")).strip()
-        team_b_raw = str(r.get("team_b", "")).strip()
-
-        def parse_team(s):
-            return [p.strip() for p in str(s).split("+") if p.strip()]
-
-        # --- adjust ---
-        if rtype == "adjust":
-            p = team_a_raw
-            try:
-                delta = float(team_b_raw)
-            except:
-                delta = 0.0
-
-            ratings.setdefault(p, 1000.0)
-            base.setdefault(p, 1000.0)
-
-            ratings[p] = ratings[p] + delta
-            last_delta[p] = delta
-            continue
-
-        # --- matches ---
-        if rtype in MATCH_TYPES:
-            team_a = parse_team(team_a_raw)
-            team_b = parse_team(team_b_raw)
-            winner = str(r.get("winner", "")).strip()
-
-            for p in team_a + team_b:
-                ratings.setdefault(p, 1000.0)
-                base.setdefault(p, 1000.0)
-
-            # poslední zápas (pro unranked logiku)
-            if d is not None:
-                for p in team_a + team_b:
-                    prev = last_match.get(p)
-                    if (prev is None) or (d > prev):
-                        last_match[p] = d
-
-            # friendly = ELO se nemění
-            if rtype.startswith("friendly"):
-                for p in team_a + team_b:
-                    last_delta[p] = 0.0
-                continue
-
-            # ranked singles/doubles
             ra = sum(ratings[p] for p in team_a) / max(1, len(team_a))
             rb = sum(ratings[p] for p in team_b) / max(1, len(team_b))
             ea = 1.0 / (1.0 + 10 ** ((rb - ra) / SCALE))
@@ -265,12 +159,32 @@ def compute_elo_with_meta():
             for p in team_a:
                 ratings[p] += da
                 last_delta[p] = da
+                played_elo_match[p] = True
+                if d:
+                    last_date[p] = d
+
             for p in team_b:
                 ratings[p] += db
                 last_delta[p] = db
+                played_elo_match[p] = True
+                if d:
+                    last_date[p] = d
 
-    total_change = {p: (ratings[p] - base.get(p, 1000.0)) for p in ratings.keys()}
-    return ratings, last_match, total_change, last_delta
+    # total delta = finální - start (base)
+    for p in ratings.keys():
+        ensure_player(p)
+        total_delta[p] = ratings[p] - base.get(p, 1000.0)
+
+    return ratings, last_date, total_delta, last_delta, played_elo_match
+
+def parse_ddmmyyyy(s: str):
+    s = str(s or "").strip()
+    try:
+        return datetime.strptime(s, "%d.%m.%Y").date()
+    except:
+        return None
+
+MATCH_TYPES = {"singles", "doubles", "friendly_singles", "friendly_doubles"}
 
 
 def get_all_players():
@@ -390,7 +304,7 @@ with tab1:
         st.dataframe(hist_df, use_container_width=True, hide_index=True)
 
 
-        
+
 # --- TAB 2: ZADÁNÍ ZÁPASU ---
 with tab2:
     all_players = get_all_players()
