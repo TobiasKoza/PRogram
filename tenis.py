@@ -352,7 +352,7 @@ with tab1:
     active_out = active_ranked_df.drop(columns=["__ranked", "__elo_num", "__ld"])
 
     st.subheader("Aktuální žebříček ELO")
-    st.dataframe(active_out, use_container_width=True, hide_index=True)
+    st.dataframe(active_out.style.set_properties(**{'text-align': 'center'}), use_container_width=True, hide_index=True)
 
     # --- SPODNÍ TABULKA = inactive ranked + unranked ---
     inactive_ranked_df = inactive_ranked_df.sort_values("__elo_num", ascending=False).reset_index(drop=True)
@@ -368,15 +368,14 @@ with tab1:
 
     st.subheader("Hráči bez zápasu za posledních 30 dní")
     inactive_out = pd.concat([inactive_ranked_out, unranked_out], ignore_index=True)
-    st.dataframe(inactive_out, use_container_width=True, hide_index=True)
+    st.dataframe(inactive_out.style.set_properties(**{'text-align': 'center'}), use_container_width=True, hide_index=True)
 
     df_all = load_data()
     all_players = sorted(list(set(list(ratings.keys()))))
 
-    picked = st.radio(
-        "Historie hráče",
+    picked = st.selectbox(
+        "Vyber hráče pro zobrazení historie:",
         options=all_players,
-        horizontal=True,
         index=all_players.index(st.session_state.get("selected_player")) if st.session_state.get("selected_player") in all_players else 0,
     )
 
@@ -388,7 +387,7 @@ with tab1:
     if hist_df.empty:
         st.info("Bez zápasů.")
     else:
-        st.dataframe(hist_df, use_container_width=True, hide_index=True)
+        st.dataframe(hist_df.style.set_properties(**{'text-align': 'center'}), use_container_width=True, hide_index=True)
 
 
 
@@ -480,4 +479,4 @@ with tab3:
     st.header("Kompletní historie zápasů")
     df_hist = load_data()
     # Zobrazení od nejnovějšího
-    st.dataframe(df_hist.iloc[::-1], use_container_width=True)
+    st.dataframe(df_hist.iloc[::-1].style.set_properties(**{'text-align': 'center'}), use_container_width=True)
