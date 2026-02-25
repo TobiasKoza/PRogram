@@ -33,7 +33,7 @@ def get_ws():
         creds = Credentials.from_service_account_file(KEYFILE, scopes=scopes)
 
     gc = gspread.authorize(creds)
-    return gc.open(SHEET_NAME).worksheet(WORKSHEET)
+    return gc.open_by_url("https://docs.google.com/spreadsheets/d/18By2jSoHEXI1WLCBYh8YXnMaCtfPNM1GsruV-pfdsXI/edit").sheet1
 # --- KONFIGURACE ---
 K_SINGLES = 24
 K_DOUBLES = 36
