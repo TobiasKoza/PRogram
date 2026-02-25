@@ -5,7 +5,7 @@ import math
 import gspread
 import streamlit as st
 from google.oauth2.service_account import Credentials
-
+from datetime import datetime, timedelta
 
 SHEET_NAME = "tennis_elo_template"
 WORKSHEET = "tennis_elo_template"
@@ -174,6 +174,105 @@ def compute_elo_with_meta():
                     last_date[p] = d
 
     return ratings, last_date, total_delta, last_delta, played_elo_match
+
+def parse_ddmmyyyy(s: str):
+    s = str(s or "").strip()
+    try:
+        return datetime.strptime(s, "%d.%m.%Y").date()
+    except:
+        return None
+
+MATCH_TYPES = {"singles", "doubles", "friendly_singles", "friendly_doubles"}
+
+def compute_elo_with_meta():
+    """
+    ratings: finální ELO
+    last_match: poslední datum zápasu (jen match typy, ne adjust)
+    total_change: finální - startovní (start = INITIAL_RATINGS nebo 1000)
+    last_delta: změna ELO v poslední akci hráče (match/adjust; friendly=0)
+    """
+    ratings = INITIAL_RATINGS.copy()
+    base = {}  # startovní ELO pro každého hráče (pro total_change)
+    for p, v in ratings.items():
+        base[p] = float(v)
+
+    last_match = {}   # jen zápasy (MATCH_TYPES)
+    last_delta = {}   # poslední změna (match/adjust/friendly)
+
+    df = load_data()
+
+    for _, r in df.iterrows():
+        rtype = str(r.get("type", "")).strip()
+        date_s = str(r.get("date", "")).strip()
+        d = parse_ddmmyyyy(date_s)
+
+        team_a_raw = str(r.get("team_a", "")).strip()
+        team_b_raw = str(r.get("team_b", "")).strip()
+
+        def parse_team(s):
+            return [p.strip() for p in str(s).split("+") if p.strip()]
+
+        # --- adjust ---
+        if rtype == "adjust":
+            p = team_a_raw
+            try:
+                delta = float(team_b_raw)
+            except:
+                delta = 0.0
+
+            ratings.setdefault(p, 1000.0)
+            base.setdefault(p, 1000.0)
+
+            ratings[p] = ratings[p] + delta
+            last_delta[p] = delta
+            continue
+
+        # --- matches ---
+        if rtype in MATCH_TYPES:
+            team_a = parse_team(team_a_raw)
+            team_b = parse_team(team_b_raw)
+            winner = str(r.get("winner", "")).strip()
+
+            for p in team_a + team_b:
+                ratings.setdefault(p, 1000.0)
+                base.setdefault(p, 1000.0)
+
+            # poslední zápas (pro unranked logiku)
+            if d is not None:
+                for p in team_a + team_b:
+                    prev = last_match.get(p)
+                    if (prev is None) or (d > prev):
+                        last_match[p] = d
+
+            # friendly = ELO se nemění
+            if rtype.startswith("friendly"):
+                for p in team_a + team_b:
+                    last_delta[p] = 0.0
+                continue
+
+            # ranked singles/doubles
+            ra = sum(ratings[p] for p in team_a) / max(1, len(team_a))
+            rb = sum(ratings[p] for p in team_b) / max(1, len(team_b))
+            ea = 1.0 / (1.0 + 10 ** ((rb - ra) / SCALE))
+            sa = 1.0 if winner == "A" else 0.0
+
+            k = K_SINGLES if rtype == "singles" else K_DOUBLES
+            delta = k * (sa - ea)
+
+            da = delta / max(1, len(team_a))
+            db = -delta / max(1, len(team_b))
+
+            for p in team_a:
+                ratings[p] += da
+                last_delta[p] = da
+            for p in team_b:
+                ratings[p] += db
+                last_delta[p] = db
+
+    total_change = {p: (ratings[p] - base.get(p, 1000.0)) for p in ratings.keys()}
+    return ratings, last_match, total_change, last_delta
+
+
 def get_all_players():
     ratings, *_ = compute_elo_with_meta()
     return sorted(list(ratings.keys()))
@@ -185,8 +284,20 @@ st.title("🎾 Tennis ELO — Zápisy a Žebříček")
 tab1, tab2, tab3 = st.tabs(["🏆 Žebříček", "✍️ Zadat zápas", "📜 Historie"])
 
 # --- TAB 1: ŽEBŘÍČEK ---
-# --- TAB 1: ŽEBŘÍČEK ---
 with tab1:
+    st.markdown("""
+    <style>
+    /* udělá z horizontal radio řádek se scrollováním */
+    div[role="radiogroup"]{
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    padding-bottom: 6px;
+    }
+    div[role="radiogroup"] label{
+    white-space: nowrap !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     st.header("Aktuální žebříček ELO")
 
     ratings, last_date, total_delta, last_delta, played_elo_match = compute_elo_with_meta()
@@ -198,55 +309,88 @@ with tab1:
         td = total_delta.get(p, 0.0)
         ldel = last_delta.get(p, 0.0)
 
+        is_ranked = bool(played_elo_match.get(p, False))  # ranked = někdy odehrál singles/doubles
+
         rows.append({
             "Hráč": p,
-            "ELO": int(round(float(elo))),  # celé číslo
+            "__ranked": is_ranked,
+            "__elo_num": int(round(float(elo))),  # pro řazení ranked
+            "ELO": int(round(float(elo))),        # dočasně, u unranked přepíšeme
             "Poslední zápas": ld_str,
             "ELO změna celkem (poslední zápas)": f"{td:+.0f} ({ldel:+.0f})",
         })
 
     rank_df = pd.DataFrame(rows)
 
-    # ranked hráči = aspoň jeden ranked match (singles/doubles)
-    rank_df["__ranked"] = rank_df["Hráč"].apply(lambda x: bool(played_elo_match.get(x, False)))
-
+    # rozdělení ranked / unranked
     ranked_df = rank_df[rank_df["__ranked"]].copy()
     unranked_df = rank_df[~rank_df["__ranked"]].copy()
 
-    ranked_df = ranked_df.sort_values("ELO", ascending=False).reset_index(drop=True)
-    ranked_df.insert(0, "#", range(1, len(ranked_df) + 1))
-
-    if not ranked_df.empty:
-        ranked_df.iloc[0, ranked_df.columns.get_loc("Hráč")] = f"👑 {ranked_df.iloc[0]['Hráč']}"
-
-    # 30 dní bez zápasu (poslední datum < dnes-30 nebo prázdné)
+    # --- 30 dní bez zápasu (jen pro ranked hráče, protože unranked jdou vždy dolů) ---
     today = datetime.now().date()
-    cutoff = today.toordinal() - 30
+    cutoff_date = today - timedelta(days=30)
 
-    def _date_ord(s):
+    def _parse_date(s):
         try:
-            return datetime.strptime(s, "%d.%m.%Y").date().toordinal()
+            return datetime.strptime(s, "%d.%m.%Y").date()
         except:
-            return -10**9
+            return None
 
-    ranked_df["__ld_ord"] = ranked_df["Poslední zápas"].apply(_date_ord)
+    ranked_df["__ld"] = ranked_df["Poslední zápas"].apply(_parse_date)
 
-    active_df = ranked_df[ranked_df["__ld_ord"] >= cutoff].drop(columns=["__ranked", "__ld_ord"])
-    inactive_ranked_df = ranked_df[ranked_df["__ld_ord"] < cutoff].drop(columns=["__ranked", "__ld_ord"])
+    active_ranked_df = ranked_df[(ranked_df["__ld"].notna()) & (ranked_df["__ld"] >= cutoff_date)].copy()
+    inactive_ranked_df = ranked_df[(ranked_df["__ld"].isna()) | (ranked_df["__ld"] < cutoff_date)].copy()
 
-    # unranked sekce (bez #)
-    unranked_df = unranked_df.sort_values("ELO", ascending=False).reset_index(drop=True)
-    if not unranked_df.empty:
-        unranked_df.insert(0, "#", ["unranked"] * len(unranked_df))
-    unranked_df = unranked_df.drop(columns=["__ranked"])
+    # --- HORNÍ TABULKA = jen active ranked ---
+    active_ranked_df = active_ranked_df.sort_values("__elo_num", ascending=False).reset_index(drop=True)
+    active_ranked_df.insert(0, "#", range(1, len(active_ranked_df) + 1))
+
+    if not active_ranked_df.empty:
+        active_ranked_df.iloc[0, active_ranked_df.columns.get_loc("Hráč")] = f"👑 {active_ranked_df.iloc[0]['Hráč']}"
+
+    active_out = active_ranked_df.drop(columns=["__ranked", "__elo_num", "__ld"])
 
     st.subheader("Aktuální žebříček ELO")
-    st.dataframe(active_df, use_container_width=True, hide_index=True)
+    st.dataframe(active_out, use_container_width=True, hide_index=True)
+
+    # --- SPODNÍ TABULKA = inactive ranked + unranked ---
+    inactive_ranked_df = inactive_ranked_df.sort_values("__elo_num", ascending=False).reset_index(drop=True)
+    inactive_ranked_df.insert(0, "#", ["inactive"] * len(inactive_ranked_df))
+
+    inactive_ranked_out = inactive_ranked_df.drop(columns=["__ranked", "__elo_num", "__ld"])
+
+    # unranked: rank = "unranked", ELO = "0(0)" (jen zobrazení)
+    unranked_df = unranked_df.sort_values("__elo_num", ascending=False).reset_index(drop=True)
+    unranked_df.insert(0, "#", ["unranked"] * len(unranked_df))
+    unranked_df["ELO"] = "0(0)"
+    unranked_out = unranked_df.drop(columns=["__ranked", "__elo_num"])
 
     st.subheader("Hráči bez zápasu za posledních 30 dní")
-    inactive_df = pd.concat([inactive_ranked_df, unranked_df], ignore_index=True)
-    st.dataframe(inactive_df, use_container_width=True, hide_index=True)
+    inactive_out = pd.concat([inactive_ranked_out, unranked_out], ignore_index=True)
+    st.dataframe(inactive_out, use_container_width=True, hide_index=True)
 
+    df_all = load_data()
+    all_players = sorted(list(set(list(ratings.keys()))))
+
+    picked = st.radio(
+        "Historie hráče",
+        options=all_players,
+        horizontal=True,
+        index=all_players.index(st.session_state.get("selected_player")) if st.session_state.get("selected_player") in all_players else 0,
+    )
+
+    st.session_state["selected_player"] = picked
+    st.subheader(f"Historie hráče: {picked}")
+
+    hist_df = build_player_history(df_all, picked)
+
+    if hist_df.empty:
+        st.info("Bez zápasů.")
+    else:
+        st.dataframe(hist_df, use_container_width=True, hide_index=True)
+
+
+        
 # --- TAB 2: ZADÁNÍ ZÁPASU ---
 with tab2:
     all_players = get_all_players()
