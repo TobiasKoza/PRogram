@@ -300,7 +300,11 @@ def get_last_matches(df: pd.DataFrame, n: int = 5) -> pd.DataFrame:
         return t
 
     def _pretty_match(a, b):
-        return f"{a} 🆚 {b}"
+        a = str(a)
+        b = str(b)
+        if len(a) > 18: a = a[:18] + "…"
+        if len(b) > 18: b = b[:18] + "…"
+        return f"{a} vs {b}"
 
     def _pretty_winner(row):
         return row["team_a"] if row["winner"] == "A" else row["team_b"]
@@ -325,18 +329,25 @@ tab1, tab2, tab3 = st.tabs(["🏆 Žebříček", "✍️ Zadat zápas", "📜 Hi
 with tab1:
     st.markdown("""
     <style>
-    /* udělá z horizontal radio řádek se scrollováním */
-    div[role="radiogroup"]{
-    flex-wrap: nowrap !important;
-    overflow-x: auto !important;
-    padding-bottom: 6px;
+    .section-bar{
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.10);
+    padding: 10px 14px;
+    border-radius: 10px;
+    text-align: center;
+    font-weight: 700;
+    font-size: 28px;
+    margin: 8px 0 18px 0;
     }
-    div[role="radiogroup"] label{
-    white-space: nowrap !important;
-    }
+
+    /* ať jsou tabulky čitelné i na 100% */
+    div[data-testid="stDataFrame"] { width: 100% !important; }
+    div[data-testid="stDataFrame"] table { width: 100% !important; }
+
+    /* menší písmo v tabulkách */
+    div[data-testid="stDataFrame"] * { font-size: 13px !important; }
     </style>
     """, unsafe_allow_html=True)
-    st.header("Aktuální žebříček ELO")
 
     ratings, last_date, total_delta, last_delta, played_elo_match = compute_elo_with_meta()
 
@@ -388,33 +399,34 @@ with tab1:
 
     active_out = active_ranked_df.drop(columns=["__ranked", "__elo_num", "__ld"])
 
+    st.markdown('<div class="section-bar">Aktuální žebříček ELO</div>', unsafe_allow_html=True)
+
     df_all = load_data()
     last5_df = get_last_matches(df_all, n=5)
 
-    # centruj horní část (3 sloupce, obsah uprostřed)
-    pad_l, mid, pad_r = st.columns([2, 6, 2])
-    with mid:
-        col_left, col_right = st.columns([3, 2])
+    left, right = st.columns([3, 2], gap="large")
 
-        with col_left:
-            st.subheader("Aktuální žebříček ELO")
-            st.dataframe(
-                active_out.style
-                    .set_properties(**{'text-align': 'center'})
-                    .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]),
-                use_container_width=True,
-                hide_index=True
-            )
+    with left:
+        st.dataframe(
+            active_out.style
+                .set_properties(**{'text-align': 'center'})
+                .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]),
+            use_container_width=True,
+            hide_index=True
+        )
 
-        with col_right:
-            st.subheader("Posledních 5 zápasů")
-            st.dataframe(
-                last5_df.style
-                    .set_properties(**{'text-align': 'center'})
-                    .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]),
-                use_container_width=True,
-                hide_index=True
-            )
+    with right:
+        st.markdown(
+            '<div style="text-align:center;font-weight:700;font-size:20px;margin-top:6px;">Posledních 5 zápasů</div>',
+            unsafe_allow_html=True
+        )
+        st.dataframe(
+            last5_df.style
+                .set_properties(**{'text-align': 'center'})
+                .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]),
+            use_container_width=True,
+            hide_index=True
+        )
 
     # --- SPODNÍ TABULKA = inactive ranked + unranked ---
     inactive_ranked_df = inactive_ranked_df.sort_values("__elo_num", ascending=False).reset_index(drop=True)
@@ -427,17 +439,20 @@ with tab1:
     unranked_df.insert(0, "#", ["unranked"] * len(unranked_df))
     unranked_df["ELO"] = "0(0)"
     unranked_out = unranked_df.drop(columns=["__ranked", "__elo_num"])
-    pad_l2, mid2, pad_r2 = st.columns([2, 6, 2])
-    with mid2:
-        st.subheader("Hráči bez zápasu za posledních 30 dní")
-        inactive_out = pd.concat([inactive_ranked_out, unranked_out], ignore_index=True)
-        st.dataframe(
-            inactive_out.style
-                .set_properties(**{'text-align': 'center'})
-                .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]),
-            use_container_width=True,
-            hide_index=True
-        )
+    st.markdown('<div style="height:10px"></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div style="text-align:center;font-weight:700;font-size:22px;margin:10px 0 10px 0;">Hráči bez zápasu za posledních 30 dní</div>',
+        unsafe_allow_html=True
+    )
+
+    inactive_out = pd.concat([inactive_ranked_out, unranked_out], ignore_index=True)
+    st.dataframe(
+        inactive_out.style
+            .set_properties(**{'text-align': 'center'})
+            .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]),
+        use_container_width=True,
+        hide_index=True
+    )
 
     df_all = load_data()
     all_players = sorted(list(set(list(ratings.keys()))))
