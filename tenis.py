@@ -1,5 +1,4 @@
 import pandas as pd
-from datetime import datetime
 import os
 import math
 import gspread
@@ -190,6 +189,94 @@ MATCH_TYPES = {"singles", "doubles", "friendly_singles", "friendly_doubles"}
 def get_all_players():
     ratings, *_ = compute_elo_with_meta()
     return sorted(list(ratings.keys()))
+
+def build_player_history(df, target):
+    ratings = INITIAL_RATINGS.copy()
+    ratings.setdefault(target, 1000.0)
+    
+    hist = []
+    
+    for _, r in df.iterrows():
+        rtype = str(r.get("type", "")).strip()
+        rawd = str(r.get("date", "")).strip()
+        winner = str(r.get("winner", "")).strip()
+        score = str(r.get("score", "")).strip()
+        sets_raw = str(r.get("sets", "")).strip()
+        reason = str(r.get("reason", "")).strip()
+        
+        # 1. Manuální úpravy
+        if rtype == "adjust":
+            p = str(r.get("team_a", "")).strip()
+            try:
+                delta = float(r.get("team_b", 0))
+            except:
+                continue
+            
+            ratings[p] = ratings.get(p, 1000.0) + delta
+            
+            if p == target:
+                is_add_player = reason.startswith("Přidání hráče")
+                if is_add_player:
+                    hist.append({
+                        "Datum": rawd, "Typ": "Přidání hráče", "Zápas": f"Nastaveno na {int(round(ratings[target]))}",
+                        "Výsledek": "", "Skóre": "", "Sety": "", "Rozdíl ELO": "", "ELO po": round(ratings[target], 2)
+                    })
+                else:
+                    hist.append({
+                        "Datum": rawd, "Typ": "Úprava ELO", "Zápas": f"Manuální úprava — {reason}".strip(' —'),
+                        "Výsledek": "", "Skóre": "", "Sety": "", "Rozdíl ELO": f"{'+' if delta >= 0 else ''}{int(delta)}", "ELO po": round(ratings[target], 2)
+                    })
+            continue
+            
+        # 2. Zápasy
+        if rtype in ["singles", "doubles", "friendly_singles", "friendly_doubles"]:
+            team_a = [p.strip() for p in str(r.get("team_a", "")).split("+") if p.strip()]
+            team_b = [p.strip() for p in str(r.get("team_b", "")).split("+") if p.strip()]
+            if not team_a or not team_b: continue
+            
+            for p in team_a + team_b:
+                ratings.setdefault(p, 1000.0)
+            
+            is_friendly = "friendly" in rtype
+            base_type = "Singles" if "singles" in rtype else "Doubles"
+            
+            ra = sum(ratings[p] for p in team_a) / len(team_a)
+            rb = sum(ratings[p] for p in team_b) / len(team_b)
+            ea = 1.0 / (1.0 + 10 ** ((rb - ra) / SCALE))
+            sa = 1.0 if winner == "A" else 0.0
+            
+            k = 0 if is_friendly else (K_SINGLES if "singles" in rtype else K_DOUBLES)
+            delta_a = k * (sa - ea)
+            delta_b = -delta_a
+            
+            per_player_delta = {}
+            for p in team_a: per_player_delta[p] = delta_a / len(team_a)
+            for p in team_b: per_player_delta[p] = delta_b / len(team_b)
+                
+            for p, d in per_player_delta.items():
+                ratings[p] = ratings.get(p, 1000.0) + d
+                
+            if target in per_player_delta:
+                d_pl = per_player_delta[target]
+                res = "Výhra" if ((winner == "A" and target in team_a) or (winner == "B" and target in team_b)) else "Prohra"
+                match_txt = f"{' + '.join(team_a)} 🆚 {' + '.join(team_b)}"
+                
+                hist.append({
+                    "Datum": rawd,
+                    "Typ": "Přátelák" if is_friendly else base_type,
+                    "Zápas": match_txt,
+                    "Výsledek": res,
+                    "Skóre": score,
+                    "Sety": sets_raw,
+                    "Rozdíl ELO": "" if is_friendly else f"{'+' if round(d_pl) >= 0 else ''}{int(round(d_pl))}",
+                    "ELO po": round(ratings[target], 2)
+                })
+                
+    if not hist:
+        return pd.DataFrame(columns=["Datum", "Typ", "Zápas", "Výsledek", "Skóre", "Sety", "Rozdíl ELO", "ELO po"])
+        
+    return pd.DataFrame(hist).iloc[::-1]
+
 # --- UI STREAMLIT ---
 st.set_page_config(page_title="Tennis ELO Žebříček", page_icon="🎾", layout="wide")
 st.title("🎾 Tennis ELO — Zápisy a Žebříček")
