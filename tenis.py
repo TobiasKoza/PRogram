@@ -10,6 +10,7 @@ SHEET_NAME = "tennis_elo_template"
 WORKSHEET = "tennis_elo_template"
 KEYFILE = "teniselo-98a88e562ec1.json"
 
+@st.cache_resource
 def get_ws():
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
@@ -17,8 +18,6 @@ def get_ws():
     ]
 
     creds = None
-
-    # Streamlit Cloud (Secrets)
     try:
         if "gcp_service_account" in st.secrets:
             creds = Credentials.from_service_account_info(
@@ -28,12 +27,12 @@ def get_ws():
     except Exception:
         creds = None
 
-    # Lokálně (soubor)
     if creds is None:
         creds = Credentials.from_service_account_file(KEYFILE, scopes=scopes)
 
     gc = gspread.authorize(creds)
-    return gc.open_by_url("https://docs.google.com/spreadsheets/d/18By2jSoHEXI1WLCBYh8YXnMaCtfPNM1GsruV-pfdsXI/edit").sheet1
+    sh = gc.open_by_url("https://docs.google.com/spreadsheets/d/18By2jSoHEXI1WLCBYh8YXnMaCtfPNM1GsruV-pfdsXI/edit")
+    return sh.sheet1
 # --- KONFIGURACE ---
 K_SINGLES = 24
 K_DOUBLES = 36
@@ -48,14 +47,10 @@ INITIAL_RATINGS = {
 # --- FUNKCE PRO DATA ---
 COLUMNS = ["date", "type", "team_a", "team_b", "winner", "score", "sets", "reason"]
 
+@st.cache_data(ttl=10)
 def load_data():
-    try:
-        ws = get_ws()
-        values = ws.get_all_values()
-    except Exception as e:
-        # Tohle donutí Streamlit ukázat nám skutečnou chybu od Googlu
-        st.error(f"🛑 Detailní chyba od Googlu: {e}")
-        st.stop()
+    ws = get_ws()
+    values = ws.get_all_values()
 
     if not values:
         ws.append_row(COLUMNS)
@@ -65,7 +60,6 @@ def load_data():
     rows = values[1:]
     df = pd.DataFrame(rows, columns=header).fillna("")
 
-    # kdyby náhodou někde chyběl sloupec
     for c in COLUMNS:
         if c not in df.columns:
             df[c] = ""
@@ -74,11 +68,12 @@ def load_data():
 def save_match(row):
     ws = get_ws()
 
-    # doplň chybějící pole, aby byl vždy stejný tvar
     full = {c: "" for c in COLUMNS}
     full.update(row)
 
     ws.append_row([full[c] for c in COLUMNS], value_input_option="USER_ENTERED")
+
+    load_data.clear()
 
 
 def compute_elo_with_meta():
@@ -400,7 +395,7 @@ with tab1:
 
 # --- TAB 2: ZADÁNÍ ZÁPASU ---
 with tab2:
-    all_players = get_all_players()
+    all_players = sorted(compute_elo_with_meta()[0].keys())
     col1, col2 = st.columns(2)
     
     with col1:
