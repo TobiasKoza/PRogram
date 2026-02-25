@@ -49,8 +49,13 @@ INITIAL_RATINGS = {
 COLUMNS = ["date", "type", "team_a", "team_b", "winner", "score", "sets", "reason"]
 
 def load_data():
-    ws = get_ws()
-    values = ws.get_all_values()
+    try:
+        ws = get_ws()
+        values = ws.get_all_values()
+    except Exception as e:
+        # Tohle donutí Streamlit ukázat nám skutečnou chybu od Googlu
+        st.error(f"🛑 Detailní chyba od Googlu: {e}")
+        st.stop()
 
     if not values:
         ws.append_row(COLUMNS)
