@@ -400,7 +400,8 @@ with tab2:
     
     with col1:
         st.subheader("Nový zápas")
-        m_type = st.radio("Typ zápasu", ["Singles", "Doubles", "Přátelák (Singles)", "Přátelák (Doubles)"])
+        m_type = st.radio("Typ zápasu", ["Singles", "Doubles"])
+        is_friendly = st.checkbox("Přátelák (nezapočítává se do ELO)")
         date = st.date_input("Datum", datetime.now())
         
         # Výběr hráčů podle typu
@@ -430,10 +431,10 @@ with tab2:
                 st.error("Hráči se nesmí opakovat!")
             else:
                 # Interní typy pro CSV
-                if m_type == "Singles": db_type = "singles"
-                elif m_type == "Doubles": db_type = "doubles"
-                elif m_type == "Přátelák (Singles)": db_type = "friendly_singles"
-                else: db_type = "friendly_doubles"
+                if m_type == "Singles":
+                    db_type = "friendly_singles" if is_friendly else "singles"
+                else:
+                    db_type = "friendly_doubles" if is_friendly else "doubles"
                 
                 save_match({
                     "date": date.strftime("%d.%m.%Y"),
