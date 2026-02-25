@@ -277,6 +277,43 @@ def build_player_history(df, target):
         
     return pd.DataFrame(hist).iloc[::-1]
 
+
+def get_last_matches(df: pd.DataFrame, n: int = 5) -> pd.DataFrame:
+    def _dt(s):
+        try:
+            return datetime.strptime(str(s).strip(), "%d.%m.%Y")
+        except:
+            return datetime.min
+
+    m = df[df["type"].isin(["singles", "doubles", "friendly_singles", "friendly_doubles"])].copy()
+    if m.empty:
+        return pd.DataFrame(columns=["Datum", "Typ", "Zápas", "Vítěz", "Skóre"])
+
+    m["__dt"] = m["date"].apply(_dt)
+    m = m.sort_values("__dt", ascending=False).head(n)
+
+    def _pretty_type(t):
+        if t == "singles": return "Singles"
+        if t == "doubles": return "Doubles"
+        if t == "friendly_singles": return "Přátelák S"
+        if t == "friendly_doubles": return "Přátelák D"
+        return t
+
+    def _pretty_match(a, b):
+        return f"{a} 🆚 {b}"
+
+    def _pretty_winner(row):
+        return row["team_a"] if row["winner"] == "A" else row["team_b"]
+
+    out = pd.DataFrame({
+        "Datum": m["date"],
+        "Typ": m["type"].apply(_pretty_type),
+        "Zápas": [_pretty_match(a, b) for a, b in zip(m["team_a"], m["team_b"])],
+        "Vítěz": m.apply(_pretty_winner, axis=1),
+        "Skóre": m["score"],
+    })
+
+    return out
 # --- UI STREAMLIT ---
 st.set_page_config(page_title="Tennis ELO Žebříček", page_icon="🎾", layout="wide")
 st.title("🎾 Tennis ELO — Zápisy a Žebříček")
@@ -351,8 +388,33 @@ with tab1:
 
     active_out = active_ranked_df.drop(columns=["__ranked", "__elo_num", "__ld"])
 
-    st.subheader("Aktuální žebříček ELO")
-    st.dataframe(active_out.style.set_properties(**{'text-align': 'center'}).set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]), use_container_width=False, hide_index=True)
+    df_all = load_data()
+    last5_df = get_last_matches(df_all, n=5)
+
+    # centruj horní část (3 sloupce, obsah uprostřed)
+    pad_l, mid, pad_r = st.columns([2, 6, 2])
+    with mid:
+        col_left, col_right = st.columns([3, 2])
+
+        with col_left:
+            st.subheader("Aktuální žebříček ELO")
+            st.dataframe(
+                active_out.style
+                    .set_properties(**{'text-align': 'center'})
+                    .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]),
+                use_container_width=True,
+                hide_index=True
+            )
+
+        with col_right:
+            st.subheader("Posledních 5 zápasů")
+            st.dataframe(
+                last5_df.style
+                    .set_properties(**{'text-align': 'center'})
+                    .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]),
+                use_container_width=True,
+                hide_index=True
+            )
 
     # --- SPODNÍ TABULKA = inactive ranked + unranked ---
     inactive_ranked_df = inactive_ranked_df.sort_values("__elo_num", ascending=False).reset_index(drop=True)
@@ -365,10 +427,17 @@ with tab1:
     unranked_df.insert(0, "#", ["unranked"] * len(unranked_df))
     unranked_df["ELO"] = "0(0)"
     unranked_out = unranked_df.drop(columns=["__ranked", "__elo_num"])
-
-    st.subheader("Hráči bez zápasu za posledních 30 dní")
-    inactive_out = pd.concat([inactive_ranked_out, unranked_out], ignore_index=True)
-    st.dataframe(inactive_out.style.set_properties(**{'text-align': 'center'}).set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]), use_container_width=False, hide_index=True)
+    pad_l2, mid2, pad_r2 = st.columns([2, 6, 2])
+    with mid2:
+        st.subheader("Hráči bez zápasu za posledních 30 dní")
+        inactive_out = pd.concat([inactive_ranked_out, unranked_out], ignore_index=True)
+        st.dataframe(
+            inactive_out.style
+                .set_properties(**{'text-align': 'center'})
+                .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]),
+            use_container_width=True,
+            hide_index=True
+        )
 
     df_all = load_data()
     all_players = sorted(list(set(list(ratings.keys()))))
