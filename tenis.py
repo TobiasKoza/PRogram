@@ -11,7 +11,6 @@ SHEET_NAME = "tennis_elo_template"
 WORKSHEET = "tennis_elo_template"
 KEYFILE = "teniselo-98a88e562ec1.json"
 
-@st.cache_resource
 def get_ws():
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
@@ -32,16 +31,10 @@ def get_ws():
 
     # Lokálně (soubor)
     if creds is None:
-        if not os.path.exists(KEYFILE):
-            st.error("Chybí Streamlit Secrets (gcp_service_account) a lokální KEYFILE neexistuje.")
-            st.stop()
         creds = Credentials.from_service_account_file(KEYFILE, scopes=scopes)
 
     gc = gspread.authorize(creds)
-    sh = gc.open(SHEET_NAME)
-    return sh.worksheet(WORKSHEET)
-
-
+    return gc.open(SHEET_NAME).worksheet(WORKSHEET)
 # --- KONFIGURACE ---
 K_SINGLES = 24
 K_DOUBLES = 36
@@ -82,215 +75,70 @@ def save_match(row):
     full.update(row)
 
     ws.append_row([full[c] for c in COLUMNS], value_input_option="USER_ENTERED")
-from datetime import datetime, date, timedelta
-
-import time
-
-def delete_sheet_row(sheet_row: int):
-    ws = get_ws()
-    for attempt in range(3):
-        try:
-            ws.delete_rows(sheet_row)
-            return
-        except gspread.exceptions.APIError:
-            if attempt == 2:
-                raise
-            time.sleep(0.8 * (attempt + 1))
-
-def compute_elo_with_meta():
+def compute_elo():
     ratings = INITIAL_RATINGS.copy()
     df = load_data()
-    # baseline (startovní ELO) – pro výpočet "ELO změna celkem"
-    base_rating = {p: float(v) for p, v in INITIAL_RATINGS.items()}
-
-    # pro hráče, co nejsou v INITIAL_RATINGS
-    def initial_for(p: str) -> float:
-        return float(INITIAL_RATINGS.get(p, 1000.0))
-
-    last_date = {}        # p -> datetime/date string
-    last_delta = {}       # p -> float (delta z posledního ELO zápasu / adjust)
-    played_elo_match = set()
-
+    
     for _, r in df.iterrows():
-        rtype = str(r.get("type", "")).strip()
-
-        # --- adjust ---
+        rtype = str(r["type"]).strip()
+        
+        # Manuální úpravy
         if rtype == "adjust":
-            p = str(r.get("team_a", "")).strip()
-            if not p:
-                continue
-
-            reason = str(r.get("reason", "")).strip()
-
+            p = str(r["team_a"]).strip()
             try:
-                delta = float(r.get("team_b", 0) or 0)
-            except:
-                delta = 0.0
-
-            # default baseline pro hráče, který ještě nemá
-            if p not in base_rating:
-                base_rating[p] = initial_for(p)
-
-            ratings[p] = ratings.get(p, base_rating[p]) + delta
-
-            # Pokud je to "Přidání hráče(...)", ber to jako nastavení startu (baseline),
-            # ne jako "změnu" do statistik
-            if reason.startswith("Přidání hráče"):
-                base_rating[p] = float(ratings[p])      # start = aktuální rating po adjustu
-                last_delta[p] = 0.0                     # poslední změna = 0
-            else:
-                last_delta[p] = float(delta)
-
-            last_date[p] = str(r.get("date", "")).strip()
+                delta = float(r["team_b"])
+                ratings[p] = ratings.get(p, 1000.0) + delta
+            except: pass
             continue
 
-        # --- ELO zápasy ---
+        # Zápasy
         if rtype in ["singles", "doubles"]:
-            winner = str(r.get("winner", "")).strip()
-            team_a = [p.strip() for p in str(r.get("team_a", "")).split("+") if p.strip()]
-            team_b = [p.strip() for p in str(r.get("team_b", "")).split("+") if p.strip()]
-            if not team_a or not team_b:
-                continue
-
-            for p in team_a + team_b:
-                ratings.setdefault(p, initial_for(p))
-
+            winner = r["winner"]
+            team_a = [p.strip() for p in str(r["team_a"]).split("+")]
+            team_b = [p.strip() for p in str(r["team_b"]).split("+")]
+            
+            for p in team_a + team_b: ratings.setdefault(p, 1000.0)
+            
             ra = sum(ratings[p] for p in team_a) / len(team_a)
             rb = sum(ratings[p] for p in team_b) / len(team_b)
             ea = 1.0 / (1.0 + 10 ** ((rb - ra) / SCALE))
             sa = 1.0 if winner == "A" else 0.0
-
+            
             k = K_SINGLES if rtype == "singles" else K_DOUBLES
-            delta_team_a = k * (sa - ea)
-            delta_a_each = delta_team_a / len(team_a)
-            delta_b_each = (-delta_team_a) / len(team_b)
-
-            for p in team_a:
-                ratings[p] += delta_a_each
-                last_delta[p] = delta_a_each
-                last_date[p] = str(r.get("date", "")).strip()
-                played_elo_match.add(p)
-
-            for p in team_b:
-                ratings[p] += delta_b_each
-                last_delta[p] = delta_b_each
-                last_date[p] = str(r.get("date", "")).strip()
-                played_elo_match.add(p)
-
-    # total delta proti startu (baseline)
-    total_delta = {p: (float(ratings[p]) - float(base_rating.get(p, initial_for(p))))
-                   for p in ratings.keys()}
-
-    return ratings, last_date, total_delta, last_delta, played_elo_match
+            delta = k * (sa - ea)
+            
+            for p in team_a: ratings[p] += delta / len(team_a)
+            for p in team_b: ratings[p] -= delta / len(team_b)
+            
+    return ratings
 
 def get_all_players():
-    ratings, *_ = compute_elo_with_meta()
+    ratings = compute_elo()
     return sorted(list(ratings.keys()))
 
 # --- UI STREAMLIT ---
 st.set_page_config(page_title="Tennis ELO Žebříček", page_icon="🎾", layout="wide")
 st.title("🎾 Tennis ELO — Zápisy a Žebříček")
-st.markdown(
-    """
-    <style>
-    /* st.dataframe() je grid, ne table -> centrovat grid buňky i hlavičky */
-    div[data-testid="stDataFrame"] [role="gridcell"],
-    div[data-testid="stDataFrame"] [role="columnheader"],
-    div[data-testid="stDataFrame"] [role="rowheader"] {
-        justify-content: center !important;
-        text-align: center !important;
-    }
 
-    /* fallback pro starší render (kdyby někde byl table) */
-    div[data-testid="stDataFrame"] table td,
-    div[data-testid="stDataFrame"] table th {
-        text-align: center !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
 # Záložky pro přepínání obsahu
 tab1, tab2, tab3 = st.tabs(["🏆 Žebříček", "✍️ Zadat zápas", "📜 Historie"])
-
-
 
 # --- TAB 1: ŽEBŘÍČEK ---
 with tab1:
     st.header("Aktuální žebříček ELO")
-
-    ratings, last_date, total_delta, last_delta, played_elo_match = compute_elo_with_meta()
-
-    # DataFrame pro všechny
-    rows = []
-    for p, elo in ratings.items():
-        rows.append({
-            "Hráč": p,
-            "ELO": int(round(float(elo), 0)),
-            "Poslední zápas": last_date.get(p, ""),
-            "ELO změna celkem (poslední zápas)": f'{total_delta.get(p, 0):+.0f} ({last_delta.get(p, 0):+.0f})'
-        })
-
-    rank_df = pd.DataFrame(rows).sort_values("ELO", ascending=False).reset_index(drop=True)
-
-    # rozdělení na aktivní/neaktivní (30 dní podle data posledního zápasu)
-    def parse_cz_date(s):
-        s = str(s).strip()
-        if not s:
-            return None
-        for fmt in ("%d.%m.%Y", "%d.%m.%y"):
-            try:
-                return datetime.strptime(s, fmt).date()
-            except:
-                pass
-        return None
-
-    today = date.today()
-    cutoff = today - timedelta(days=30)
-
-    active_rows = []
-    inactive_rows = []
-    for i, r in rank_df.iterrows():
-        d = parse_cz_date(r["Poslední zápas"])
-        is_active = (d is not None and d >= cutoff and r["Hráč"] in played_elo_match)
-        if is_active:
-            active_rows.append(r)
-        else:
-            inactive_rows.append(r)
-
-    active_df = pd.DataFrame(active_rows) if active_rows else pd.DataFrame(columns=rank_df.columns)
-    inactive_df = pd.DataFrame(inactive_rows) if inactive_rows else pd.DataFrame(columns=rank_df.columns)
-
-    # doplnění pořadí + korunka
-    if not active_df.empty:
-        active_df.insert(0, "#", range(1, len(active_df) + 1))
-        active_df.loc[0, "Hráč"] = f"👑 {active_df.loc[0, 'Hráč']}"
-    else:
-        active_df.insert(0, "#", [])
-
-    sty = active_df.style.set_properties(**{"text-align": "center"}).set_table_styles(
-    [{"selector": "th", "props": [("text-align", "center")]}]
-)
-
-    try:
-        st.dataframe(sty, use_container_width=True, hide_index=True)
-    except TypeError:
-        st.dataframe(sty.hide(axis="index"), use_container_width=True)
-
-    st.subheader("Hráči bez zápasu za posledních 30 dní")
-    if inactive_df.empty:
-        st.write("Nikdo.")
-    else:
-        inactive_df.insert(0, "#", ["unranked"] * len(inactive_df))
-        sty = inactive_df.style.set_properties(**{"text-align": "center"}).set_table_styles(
-    [{"selector": "th", "props": [("text-align", "center")]}]
-)
-
-    try:
-        st.dataframe(sty, use_container_width=True, hide_index=True)
-    except TypeError:
-        st.dataframe(sty.hide(axis="index"), use_container_width=True)
-
+    ratings = compute_elo()
+    
+    # Převod do tabulky
+    rank_df = pd.DataFrame(list(ratings.items()), columns=["Hráč", "ELO"])
+    rank_df = rank_df.sort_values(by="ELO", ascending=False).reset_index(drop=True)
+    rank_df.index += 1
+    rank_df["ELO"] = rank_df["ELO"].round(2)
+    
+    # Přidání korunky prvnímu hráči
+    if not rank_df.empty:
+        rank_df.loc[1, "Hráč"] = f"👑 {rank_df.loc[1, 'Hráč']}"
+    
+    st.dataframe(rank_df, use_container_width=True)
 
 # --- TAB 2: ZADÁNÍ ZÁPASU ---
 with tab2:
@@ -378,55 +226,6 @@ with tab2:
 # --- TAB 3: HISTORIE ---
 with tab3:
     st.header("Kompletní historie zápasů")
-
     df_hist = load_data()
-
-    if df_hist.empty:
-        st.info("Historie je prázdná.")
-    else:
-        # přidej číslo řádku v Google Sheetu (1 = hlavička, data začínají na řádku 2)
-        df_hist = df_hist.copy()
-        df_hist["_sheet_row"] = range(2, len(df_hist) + 2)
-
-        # view od nejnovějšího
-        view = df_hist.iloc[::-1].reset_index(drop=True)
-
-        # výběr zápasu ke smazání
-        def _label(r):
-            ta = str(r["team_a"])
-            tb = str(r["team_b"])
-            dt = str(r["date"])
-            tp = str(r["type"])
-            wn = str(r.get("winner", ""))
-            sc = str(r.get("score", ""))
-            return f"{dt} | {tp} | {ta} vs {tb} | W:{wn} | {sc}"
-
-        options = list(view.index)
-        sel = st.selectbox(
-            "Vyber zápas k odstranění",
-            options=options,
-            format_func=lambda i: _label(view.loc[i]),
-        )
-
-        colA, colB = st.columns([1, 3])
-        with colA:
-            confirm = st.checkbox("Potvrzuji smazání", value=False)
-
-        with colB:
-            if st.button("🗑️ Smazat vybraný zápas a přepočítat ELO", use_container_width=True, disabled=not confirm):
-                sheet_row = int(view.loc[sel, "_sheet_row"])
-                delete_sheet_row(sheet_row)
-                st.success("Smazáno. ELO se přepočítalo z historie.")
-                st.rerun()
-
-        # tabulka historie bez levého indexu + bez pomocného sloupce
-        show = view.drop(columns=["_sheet_row"])
-
-        sty = show.style.set_properties(**{"text-align": "center"}).set_table_styles(
-            [{"selector": "th", "props": [("text-align", "center")]}]
-        )
-
-        try:
-            st.dataframe(sty, use_container_width=True, hide_index=True)
-        except TypeError:
-            st.dataframe(sty.hide(axis="index"), use_container_width=True)
+    # Zobrazení od nejnovějšího
+    st.dataframe(df_hist.iloc[::-1], use_container_width=True)
