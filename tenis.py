@@ -75,47 +75,108 @@ def save_match(row):
     full.update(row)
 
     ws.append_row([full[c] for c in COLUMNS], value_input_option="USER_ENTERED")
-def compute_elo():
+
+
+def compute_elo_with_meta():
     ratings = INITIAL_RATINGS.copy()
     df = load_data()
-    
+
+    # meta
+    last_date = {p: None for p in ratings}
+    total_delta = {p: 0.0 for p in ratings}
+    last_delta = {p: 0.0 for p in ratings}
+    played_elo_match = {p: False for p in ratings}
+
+    def parse_team(s: str):
+        return [x.strip() for x in str(s).split("+") if x.strip()]
+
+    def parse_date(s: str):
+        try:
+            return datetime.strptime(str(s).strip(), "%d.%m.%Y").date()
+        except:
+            return None
+
     for _, r in df.iterrows():
-        rtype = str(r["type"]).strip()
-        
-        # Manuální úpravy
+        rtype = str(r.get("type", "")).strip()
+        d = parse_date(r.get("date", ""))
+
+        # adjust
         if rtype == "adjust":
-            p = str(r["team_a"]).strip()
+            p = str(r.get("team_a", "")).strip()
             try:
-                delta = float(r["team_b"])
-                ratings[p] = ratings.get(p, 1000.0) + delta
-            except: pass
+                delta = float(r.get("team_b", 0))
+            except:
+                delta = 0.0
+
+            ratings.setdefault(p, 1000.0)
+            last_date.setdefault(p, None)
+            total_delta.setdefault(p, 0.0)
+            last_delta.setdefault(p, 0.0)
+            played_elo_match.setdefault(p, False)
+
+            ratings[p] += delta
+            total_delta[p] += delta
+            last_delta[p] = delta
+            if d:
+                last_date[p] = d
             continue
 
-        # Zápasy
+        # matches (ranked)
         if rtype in ["singles", "doubles"]:
-            winner = r["winner"]
-            team_a = [p.strip() for p in str(r["team_a"]).split("+")]
-            team_b = [p.strip() for p in str(r["team_b"]).split("+")]
-            
-            for p in team_a + team_b: ratings.setdefault(p, 1000.0)
-            
+            team_a = parse_team(r.get("team_a", ""))
+            team_b = parse_team(r.get("team_b", ""))
+            winner = str(r.get("winner", "")).strip()
+
+            for p in team_a + team_b:
+                ratings.setdefault(p, 1000.0)
+                last_date.setdefault(p, None)
+                total_delta.setdefault(p, 0.0)
+                last_delta.setdefault(p, 0.0)
+                played_elo_match.setdefault(p, False)
+
             ra = sum(ratings[p] for p in team_a) / len(team_a)
             rb = sum(ratings[p] for p in team_b) / len(team_b)
             ea = 1.0 / (1.0 + 10 ** ((rb - ra) / SCALE))
             sa = 1.0 if winner == "A" else 0.0
-            
+
             k = K_SINGLES if rtype == "singles" else K_DOUBLES
             delta = k * (sa - ea)
-            
-            for p in team_a: ratings[p] += delta / len(team_a)
-            for p in team_b: ratings[p] -= delta / len(team_b)
-            
-    return ratings
 
+            # před update
+            before = {p: ratings[p] for p in team_a + team_b}
+
+            for p in team_a:
+                ratings[p] += delta / len(team_a)
+            for p in team_b:
+                ratings[p] -= delta / len(team_b)
+
+            # after + meta
+            for p in team_a + team_b:
+                ch = ratings[p] - before[p]
+                total_delta[p] += ch
+                last_delta[p] = ch
+                played_elo_match[p] = True
+                if d:
+                    last_date[p] = d
+            continue
+
+        # friendly -> jen aktualizace posledního zápasu (bez ELO změn)
+        if rtype in ["friendly_singles", "friendly_doubles"]:
+            team_a = parse_team(r.get("team_a", ""))
+            team_b = parse_team(r.get("team_b", ""))
+            for p in team_a + team_b:
+                ratings.setdefault(p, 1000.0)
+                last_date.setdefault(p, None)
+                total_delta.setdefault(p, 0.0)
+                last_delta.setdefault(p, 0.0)
+                played_elo_match.setdefault(p, False)
+                if d:
+                    last_date[p] = d
+
+    return ratings, last_date, total_delta, last_delta, played_elo_match
 def get_all_players():
-    ratings = compute_elo()
+    ratings, *_ = compute_elo_with_meta()
     return sorted(list(ratings.keys()))
-
 # --- UI STREAMLIT ---
 st.set_page_config(page_title="Tennis ELO Žebříček", page_icon="🎾", layout="wide")
 st.title("🎾 Tennis ELO — Zápisy a Žebříček")
@@ -124,21 +185,67 @@ st.title("🎾 Tennis ELO — Zápisy a Žebříček")
 tab1, tab2, tab3 = st.tabs(["🏆 Žebříček", "✍️ Zadat zápas", "📜 Historie"])
 
 # --- TAB 1: ŽEBŘÍČEK ---
+# --- TAB 1: ŽEBŘÍČEK ---
 with tab1:
     st.header("Aktuální žebříček ELO")
-    ratings = compute_elo()
-    
-    # Převod do tabulky
-    rank_df = pd.DataFrame(list(ratings.items()), columns=["Hráč", "ELO"])
-    rank_df = rank_df.sort_values(by="ELO", ascending=False).reset_index(drop=True)
-    rank_df.index += 1
-    rank_df["ELO"] = rank_df["ELO"].round(2)
-    
-    # Přidání korunky prvnímu hráči
-    if not rank_df.empty:
-        rank_df.loc[1, "Hráč"] = f"👑 {rank_df.loc[1, 'Hráč']}"
-    
-    st.dataframe(rank_df, use_container_width=True)
+
+    ratings, last_date, total_delta, last_delta, played_elo_match = compute_elo_with_meta()
+
+    rows = []
+    for p, elo in ratings.items():
+        ld = last_date.get(p)
+        ld_str = ld.strftime("%d.%m.%Y") if ld else ""
+        td = total_delta.get(p, 0.0)
+        ldel = last_delta.get(p, 0.0)
+
+        rows.append({
+            "Hráč": p,
+            "ELO": int(round(float(elo))),  # celé číslo
+            "Poslední zápas": ld_str,
+            "ELO změna celkem (poslední zápas)": f"{td:+.0f} ({ldel:+.0f})",
+        })
+
+    rank_df = pd.DataFrame(rows)
+
+    # ranked hráči = aspoň jeden ranked match (singles/doubles)
+    rank_df["__ranked"] = rank_df["Hráč"].apply(lambda x: bool(played_elo_match.get(x, False)))
+
+    ranked_df = rank_df[rank_df["__ranked"]].copy()
+    unranked_df = rank_df[~rank_df["__ranked"]].copy()
+
+    ranked_df = ranked_df.sort_values("ELO", ascending=False).reset_index(drop=True)
+    ranked_df.insert(0, "#", range(1, len(ranked_df) + 1))
+
+    if not ranked_df.empty:
+        ranked_df.iloc[0, ranked_df.columns.get_loc("Hráč")] = f"👑 {ranked_df.iloc[0]['Hráč']}"
+
+    # 30 dní bez zápasu (poslední datum < dnes-30 nebo prázdné)
+    today = datetime.now().date()
+    cutoff = today.toordinal() - 30
+
+    def _date_ord(s):
+        try:
+            return datetime.strptime(s, "%d.%m.%Y").date().toordinal()
+        except:
+            return -10**9
+
+    ranked_df["__ld_ord"] = ranked_df["Poslední zápas"].apply(_date_ord)
+
+    active_df = ranked_df[ranked_df["__ld_ord"] >= cutoff].drop(columns=["__ranked", "__ld_ord"])
+    inactive_ranked_df = ranked_df[ranked_df["__ld_ord"] < cutoff].drop(columns=["__ranked", "__ld_ord"])
+
+    # unranked sekce (bez #)
+    unranked_df = unranked_df.sort_values("ELO", ascending=False).reset_index(drop=True)
+    if not unranked_df.empty:
+        unranked_df.insert(0, "#", ["unranked"] * len(unranked_df))
+    unranked_df = unranked_df.drop(columns=["__ranked"])
+
+    st.subheader("Aktuální žebříček ELO")
+    st.dataframe(active_df, use_container_width=True, hide_index=True)
+
+    st.subheader("Hráči bez zápasu za posledních 30 dní")
+    inactive_df = pd.concat([inactive_ranked_df, unranked_df], ignore_index=True)
+    st.dataframe(inactive_df, use_container_width=True, hide_index=True)
 
 # --- TAB 2: ZADÁNÍ ZÁPASU ---
 with tab2:
