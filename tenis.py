@@ -1006,12 +1006,12 @@ with tab2:
             team_b = p2 if p2 is not None else ""
         else:
             c_a1, c_a2 = st.columns(2)
-            with c_a1: p1a = st.selectbox("Tým A - Hráč 1", players_pick, index=None, placeholder="— nevybráno —", key="d_a1")
-            with c_a2: p1b = st.selectbox("Tým A - Hráč 2", players_pick, index=None, placeholder="— nevybráno —", key="d_a2")
+            with c_a1: p1a = st.selectbox("Tým A - Hráč 1", all_players, index=None, placeholder="— nevybráno —", key="d_a1")
+            with c_a2: p1b = st.selectbox("Tým A - Hráč 2", all_players, index=None, placeholder="— nevybráno —", key="d_a2")
             
             c_b1, c_b2 = st.columns(2)
-            with c_b1: p2a = st.selectbox("Tým B - Hráč 1", players_pick, index=None, placeholder="— nevybráno —", key="d_b1")
-            with c_b2: p2b = st.selectbox("Tým B - Hráč 2", players_pick, index=None, placeholder="— nevybráno —", key="d_b2")
+            with c_b1: p2a = st.selectbox("Tým B - Hráč 1", all_players, index=None, placeholder="— nevybráno —", key="d_b1")
+            with c_b2: p2b = st.selectbox("Tým B - Hráč 2", all_players, index=None, placeholder="— nevybráno —", key="d_b2")
             team_a = f"{p1a}+{p1b}" if (p1a and p1b) else ""
             team_b = f"{p2a}+{p2b}" if (p2a and p2b) else ""
             
@@ -1061,20 +1061,16 @@ with tab2:
             # flag pro success po rerunu
             st.session_state["_match_saved"] = True
 
-            # RESET formuláře
-            st.session_state["m_type"] = "Singles"
-            st.session_state["is_friendly"] = False
-            st.session_state["match_date"] = datetime.now().date()
-
-            st.session_state["s1"] = None
-            st.session_state["s2"] = None
-
-            for k in ["d_a1", "d_a2", "d_b1", "d_b2"]:
-                st.session_state[k] = None
-
-            st.session_state["winner_sel"] = "A"
-            st.session_state["score_in"] = ""
-            st.session_state["sets_in"] = ""
+            # RESET formuláře - bezpečné smazání klíčů
+            keys_to_reset = [
+                "m_type", "is_friendly", "match_date", 
+                "s1", "s2", "d_a1", "d_a2", "d_b1", "d_b2", 
+                "winner_sel", "score_in", "sets_in"
+            ]
+            
+            for key in keys_to_reset:
+                if key in st.session_state:
+                    del st.session_state[key]
 
             st.rerun()
 
