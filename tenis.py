@@ -5,6 +5,9 @@ import gspread
 import streamlit as st
 from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta
+import streamlit as st
+import streamlit_authenticator as stauth 
+
 
 SHEET_NAME = "tennis_elo_template"
 WORKSHEET = "tennis_elo_template"
@@ -439,16 +442,39 @@ def get_last_matches(df: pd.DataFrame, n: int = 5) -> pd.DataFrame:
     })
 
     return out
+
+
+
+
 # --- UI STREAMLIT ---
 st.set_page_config(page_title="Tennis ELO Žebříček", page_icon="🎾", layout="wide")
 st.title("🎾 Tennis ELO — Zápisy a Žebříček")
+
+# --- PŘIHLAŠOVÁNÍ (Levý panel) ---
+authenticator = stauth.Authenticate(
+    dict(st.secrets["credentials"]),
+    st.secrets["cookie"]["name"],
+    st.secrets["cookie"]["key"],
+    st.secrets["cookie"]["expiry_days"]
+)
+
+authenticator.login(location="sidebar")
+
+if st.session_state["authentication_status"]:
+    authenticator.logout("Odhlásit se", location="sidebar")
+    st.sidebar.success(f'Přihlášen jako: **{st.session_state["name"]}**')
+elif st.session_state["authentication_status"] is False:
+    st.sidebar.error('Špatné uživatelské jméno nebo heslo')
+elif st.session_state["authentication_status"] is None:
+    st.sidebar.warning('Pro zápis výsledků se přihlas')
+
 def bar(text: str):
     st.markdown(f'<div class="section-bar">{text}</div>', unsafe_allow_html=True)
 
 # Záložky pro přepínání obsahu
 tab1, tab_sd, tab2, tab3 = st.tabs(["🏆 Žebříček", "🎾 Singles & Doubles", "✍️ Zadat zápas nebo přidat hráče", "📜 Kompletní historie"])
 
-# načti sheet JEDNOU pro celý run (tabs se i tak vykonají všechny)
+# načti sheet JEDNOU pro celý run
 DF_ALL = load_data()
 
 # --- TAB 1: ŽEBŘÍČEK ---
@@ -974,6 +1000,18 @@ with tab_sd:
             st.markdown("".join(parts), unsafe_allow_html=True)
 # --- TAB 2: ZADÁNÍ ZÁPASU ---
 with tab2:
+    if st.session_state.get("authentication_status"):
+        # 1. Zobrazení vyskakovacích mizejících zpráv (Toasty)
+        if st.session_state.get("_match_saved"):
+            st.toast("Zápas byl úspěšně uložen!", icon="✅")
+            st.session_state["_match_saved"] = False
+        
+        # ... ZDE POKRAČUJE CELÝ TVŮJ SOUČASNÝ KÓD PRO TAB 2 ...
+        # (všechny inputy, tlačítka atd., nezapomeň to všechno odsadit!)
+        # ...
+        
+    else:
+        st.warning("⚠️ Pro zadávání nových zápasů, přidávání hráčů a úpravu ELO se musíš přihlásit v levém panelu.")
     # 1. Zobrazení vyskakovacích mizejících zpráv (Toasty)
     if st.session_state.get("_match_saved"):
         st.toast("Zápas byl úspěšně uložen!", icon="✅")
