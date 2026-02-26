@@ -440,41 +440,51 @@ def get_last_matches(df: pd.DataFrame, n: int = 5) -> pd.DataFrame:
 
 # --- UI STREAMLIT ---
 st.set_page_config(page_title="Tennis ELO Žebříček", page_icon="🎾", layout="wide")
-# --- FUNKCE PRO NAČTENÍ OBRÁZKU DO HTML ---
-def get_base64_image(image_path):
-    with open(image_path, "rb") as img_file:
-        return base64.b64encode(img_file.read()).decode()
+# --- NOVÝ OPRAVENÝ BLOK NADPISU ---
+def get_base64_image(image_filename):
+    # Najde cestu ke složce, kde běží skript
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    img_path = os.path.join(dir_path, image_filename)
+    
+    if os.path.exists(img_path):
+        with open(img_path, "rb") as img_file:
+            return base64.b64encode(img_file.read()).decode()
+    return None
 
-# Načtení tvého obrázku
-try:
-    img_base64 = get_base64_image("ChatGPT Image 26. 2. 2026 19_37_23.jpg")
-    img_html = f'<img src="data:image/jpeg;base64,{img_base64}" style="height: 60px; margin-right: 20px; border-radius: 10px;">'
-except:
-    img_html = "🎾 " # Záloha, kdyby se obrázek nenačetl
+# Pokus o načtení loga (správný název souboru)
+img_data = get_base64_image("logo_tenis.png")
 
-# Vykreslení hezkého nadpisu v obdélníku
+if img_data:
+    # Změněno na image/png
+    img_html = f'<img src="data:image/png;base64,{img_data}" style="height: 70px; margin-right: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">'
+else:
+    # Záloha pokud se obrázek nenajde
+    img_html = "🎾 "
+
+# Vykreslení nadpisu v moderním obdélníku
 st.markdown(f"""
     <div style="
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        border-radius: 15px;
-        padding: 20px;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 20px;
+        padding: 25px;
         display: flex;
         align-items: center;
         justify-content: center;
-        margin-bottom: 25px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        margin-bottom: 30px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.4);
     ">
         {img_html}
         <h1 style="
             margin: 0;
             padding: 0;
-            color: white;
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            letter-spacing: 2px;
+            color: #ffffff;
+            font-family: 'Segoe UI', sans-serif;
+            letter-spacing: 1.5px;
             text-transform: uppercase;
-            font-size: 32px;
-            font-weight: 800;
+            font-size: 34px;
+            font-weight: 900;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
         ">
             TENIS ELO — Zápisy a žebříčky
         </h1>
