@@ -119,8 +119,6 @@ def compute_elo_with_meta():
             ensure_player(p)
             ratings[p] += delta
             last_delta[p] = delta
-            if d:
-                last_date[p] = d
             continue
 
         # --- friendly ---
@@ -518,7 +516,7 @@ with tab1:
     rows = []
     for p, elo in ratings.items():
         ld = last_date.get(p)
-        ld_str = ld.strftime("%d.%m.%Y") if ld else ""
+        ld_str = ld.strftime("%d.%m.%Y") if ld else "—"
         td = total_delta.get(p, 0.0)
         ldel = last_delta.get(p, 0.0)
 
