@@ -78,6 +78,11 @@ def save_match(row):
 
     load_data.clear()
 
+def delete_match_by_row(row_index):
+    ws = get_ws()
+    # Google Sheets čísluje od 1, DF index + header + 1
+    ws.delete_rows(int(row_index))
+    load_data.clear()
 
 def compute_elo_with_meta():
     ratings = INITIAL_RATINGS.copy()
@@ -304,14 +309,13 @@ def build_full_history(df: pd.DataFrame) -> pd.DataFrame:
     tmp = tmp.sort_values("__dt", ascending=True).drop(columns=["__dt"])
 
     out = []
-
+    tmp["sheet_row"] = tmp.index + 2 # +1 pro header, +1 pro indexování od 1
     for _, r in tmp.iterrows():
         rtype = str(r.get("type", "")).strip()
         rawd = str(r.get("date", "")).strip()
         winner = str(r.get("winner", "")).strip()
         score = str(r.get("score", "")).strip()
         reason = str(r.get("reason", "")).strip()
-        # --- NOVÉ: Načtení autora ---
         author = str(r.get("author", "")).strip()
 
         # --- ADJUST (1 řádek) ---
@@ -345,7 +349,8 @@ def build_full_history(df: pd.DataFrame) -> pd.DataFrame:
                 "Důvod": duvod,
                 "Výsledek": "",
                 "Skóre": "",
-                "Zapsal": author  # --- PŘIDÁNO ---
+                "Zapsal": author,
+                "row_idx": r["sheet_row"]
             })
             continue
 
@@ -1182,26 +1187,30 @@ with tab2:
 
 # --- TAB 3: HISTORIE ---
 
+# --- TAB 3: HISTORIE ---
 with tab3:
     bar("Kompletní historie zápasů")
 
     df_hist = build_full_history(DF_ALL)
+    
+    # Pro tabulku skryjeme pomocný sloupec s indexem řádku
+    display_df = df_hist.drop(columns=["row_idx"]) if "row_idx" in df_hist.columns else df_hist
 
     st.markdown("""
     <style>
-      /* TAB 3 = vlastní HTML tabulka, šířky podle obsahu, žádný filler sloupec */
       .hist-wrap{
         width: 100%;
         overflow-x: auto;
         border: 1px solid rgba(255,255,255,0.08);
         border-radius: 12px;
         background: rgba(0,0,0,0.10);
+        margin-bottom: 20px;
       }
       table.hist-table{
         border-collapse: collapse;
         table-layout: auto;
-        width: max-content;      /* šířka podle nejdelších hodnot */
-        min-width: 100%;         /* když je krátká, vyplní wrapper */
+        width: max-content;
+        min-width: 100%;
       }
       table.hist-table thead th{
         position: sticky;
@@ -1215,20 +1224,44 @@ with tab3:
         padding: 10px 12px;
         border-right: 1px solid rgba(255,255,255,0.06);
         border-bottom: 1px solid rgba(255,255,255,0.06);
-        white-space: nowrap;     /* neláme text, šířky podle obsahu */
+        white-space: nowrap;
         text-align: center;
         font-size: 12.5px;
         color: rgba(255,255,255,0.90);
       }
-      table.hist-table th:last-child, table.hist-table td:last-child{
-        border-right: none;
-      }
-      table.hist-table tr:last-child td{
-        border-bottom: none;
-      }
     </style>
     """, unsafe_allow_html=True)
 
-    html_table = df_hist.to_html(index=False, classes="hist-table", border=0, escape=True)
-
+    html_table = display_df.to_html(index=False, classes="hist-table", border=0, escape=True)
     st.markdown(f'<div class="hist-wrap">{html_table}</div>', unsafe_allow_html=True)
+
+    # --- ADMIN SEKCE POUZE PRO TOBIHO ---
+    # Kontrola, zda je přihlášený uživatel se jménem "Tobi"
+    if st.session_state.get("authentication_status") and st.session_state.get("name") == "Tobi":
+        st.write("---")
+        st.subheader("🛠️ Admin správa zápasů")
+        
+        # Vytvoříme seznam pro selectbox (Datum + Zápas)
+        match_options = df_hist.apply(lambda x: f"{x['Datum']} | {x['Typ']} | {x['Zápas']}", axis=1).tolist()
+        selected_match_str = st.selectbox("Vyber zápas ke smazání:", options=match_options, index=None, placeholder="Vyber řádek z historie...")
+
+        @st.dialog("⚠️ Potvrdit smazání")
+        def delete_dialog(row_to_delete, info):
+            st.warning(f"Opravdu chceš smazat tento zápas?")
+            st.code(info)
+            st.error("Tahle akce nejde vrátit zpět!")
+            
+            c1, c2 = st.columns(2)
+            if c1.button("🔥 Ano, smazat", type="primary", use_container_width=True):
+                delete_match_by_row(row_to_delete)
+                st.success("Zápas byl vymazán z databáze.")
+                st.rerun()
+            if c2.button("Zrušit", use_container_width=True):
+                st.rerun()
+
+        if selected_match_str:
+            if st.button("🗑️ Odstranit vybraný zápas", use_container_width=True):
+                # Najdeme index vybraného zápasu a jeho row_idx
+                idx = match_options.index(selected_match_str)
+                target_row = df_hist.iloc[idx]["row_idx"]
+                delete_dialog(target_row, selected_match_str)
