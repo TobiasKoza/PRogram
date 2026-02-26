@@ -512,7 +512,7 @@ with tab1:
                 .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]),
             use_container_width=True,
             hide_index=True
-        )with right:
+        )
         right_n = len(players_out)
 
         match_types = ["singles", "doubles", "friendly_singles", "friendly_doubles"]
