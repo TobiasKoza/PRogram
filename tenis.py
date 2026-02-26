@@ -559,7 +559,7 @@ with tab1:
             "Hráč": p,
             "__ranked": is_ranked,
             "__elo_num": int(round(float(elo))),  # pro řazení ranked
-            "ELO": int(round(float(elo))),        # dočasně, u unranked přepíšeme
+            "ELO": round(float(elo), 2),
             "Poslední zápas": ld_str,
             "Δ ELO (posl.)": f"{td:+.0f} ({ldel:+.0f})",
         })
@@ -791,6 +791,7 @@ with tab1:
             hist_styler = (
                 hist_df.style
                     .hide(axis="index")
+                    .format({"ELO po": "{:.2f}"})
                     .applymap(_res_color, subset=["Výsledek"])
             )
 
