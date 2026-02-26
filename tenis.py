@@ -986,12 +986,20 @@ with tab_sd:
             st.markdown("".join(parts), unsafe_allow_html=True)
 # --- TAB 2: ZADÁNÍ ZÁPASU ---
 with tab2:
-    # 1. Zobrazení vyskakovací mizející zprávy (Toast)
+    # 1. Zobrazení vyskakovacích mizejících zpráv (Toasty)
     if st.session_state.get("_match_saved"):
         st.toast("Zápas byl úspěšně uložen!", icon="✅")
         st.session_state["_match_saved"] = False
+        
+    if st.session_state.get("_elo_adjusted"):
+        st.toast("ELO bylo úspěšně upraveno!", icon="✅")
+        st.session_state["_elo_adjusted"] = False
+        
+    if st.session_state.get("_player_added"):
+        st.toast("Nový hráč byl úspěšně přidán!", icon="✅")
+        st.session_state["_player_added"] = False
 
-    # 2. Skutečný a bezpečný reset formuláře před jeho vykreslením
+    # 2. Skutečný a bezpečný reset formulářů před jejich vykreslením
     if st.session_state.get("_clear_form"):
         st.session_state["m_type"] = "Singles"
         st.session_state["is_friendly"] = False
@@ -1006,6 +1014,18 @@ with tab2:
         st.session_state["score_in"] = ""
         st.session_state["sets_in"] = ""
         st.session_state["_clear_form"] = False
+
+    if st.session_state.get("_clear_adj"):
+        st.session_state["adj_p"] = None
+        st.session_state["adj_delta"] = 0
+        st.session_state["adj_reason"] = ""
+        st.session_state["_clear_adj"] = False
+
+    if st.session_state.get("_clear_add"):
+        st.session_state["new_name"] = ""
+        st.session_state["new_elo"] = 1000
+        st.session_state["_clear_add"] = False
+
 
     all_players = sorted(compute_elo_with_meta()[0].keys())
     col1, col2 = st.columns(2)
@@ -1101,10 +1121,16 @@ with tab2:
 
     with adj_col1:
         bar("Upravit existující ELO")
+        
+        # INICIALIZACE ÚPRAVY ELO
+        if "adj_delta" not in st.session_state:
+            st.session_state["adj_p"] = None
+            st.session_state["adj_delta"] = 0
+            st.session_state["adj_reason"] = ""
 
-        adj_player = st.selectbox("Hráč", all_players, index=None, placeholder="— nevybráno —", key="adj_p")
-        adj_delta = st.number_input("Změna (např. 5 nebo -3)", step=1, value=0)
-        adj_reason = st.text_input("Důvod úpravy")
+        adj_player = st.selectbox("Hráč", all_players, placeholder="— nevybráno —", key="adj_p")
+        adj_delta = st.number_input("Změna (např. 5 nebo -3)", step=1, key="adj_delta")
+        adj_reason = st.text_input("Důvod úpravy", key="adj_reason")
 
         if st.button("Upravit ELO"):
             if adj_player is None:
@@ -1117,13 +1143,21 @@ with tab2:
                     "team_b": adj_delta,
                     "reason": adj_reason
                 })
+                # Spuštění Toasta a vyčištění
+                st.session_state["_elo_adjusted"] = True
+                st.session_state["_clear_adj"] = True
                 st.rerun()
 
     with adj_col2:
         bar("Přidat nového hráče")
+        
+        # INICIALIZACE PŘIDÁNÍ HRÁČE
+        if "new_elo" not in st.session_state:
+            st.session_state["new_name"] = ""
+            st.session_state["new_elo"] = 1000
 
-        new_name = st.text_input("Jméno nového hráče")
-        new_elo = st.number_input("Startovní ELO", value=1000, step=10)
+        new_name = st.text_input("Jméno nového hráče", key="new_name")
+        new_elo = st.number_input("Startovní ELO", step=10, key="new_elo")
 
         if st.button("Přidat hráče"):
             if new_name and new_name not in all_players:
@@ -1135,10 +1169,14 @@ with tab2:
                     "team_b": delta,
                     "reason": f"Přidání hráče({new_elo} ELO)"
                 })
-                st.success(f"Hráč {new_name} přidán!")
+                # Spuštění Toasta a vyčištění
+                st.session_state["_player_added"] = True
+                st.session_state["_clear_add"] = True
                 st.rerun()
             elif new_name in all_players:
                 st.error("Tento hráč už existuje.")
+
+                
 # --- TAB 3: HISTORIE ---
 
 with tab3:
