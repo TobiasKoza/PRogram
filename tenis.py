@@ -302,8 +302,8 @@ def get_last_matches(df: pd.DataFrame, n: int = 5) -> pd.DataFrame:
     def _pretty_match(a, b):
         a = str(a)
         b = str(b)
-        if len(a) > 18: a = a[:18] + "…"
-        if len(b) > 18: b = b[:18] + "…"
+        if len(a) > 14: a = a[:14] + "…"
+        if len(b) > 14: b = b[:14] + "…"
         return f"{a} vs {b}"
 
     def _pretty_winner(row):
@@ -321,6 +321,8 @@ def get_last_matches(df: pd.DataFrame, n: int = 5) -> pd.DataFrame:
 # --- UI STREAMLIT ---
 st.set_page_config(page_title="Tennis ELO Žebříček", page_icon="🎾", layout="wide")
 st.title("🎾 Tennis ELO — Zápisy a Žebříček")
+def bar(text: str):
+    st.markdown(f'<div class="section-bar">{text}</div>', unsafe_allow_html=True)
 
 # Záložky pro přepínání obsahu
 tab1, tab2, tab3 = st.tabs(["🏆 Žebříček", "✍️ Zadat zápas", "📜 Historie"])
@@ -330,22 +332,23 @@ with tab1:
     st.markdown("""
     <style>
     .section-bar{
-    background: rgba(255,255,255,0.08);
-    border: 1px solid rgba(255,255,255,0.10);
-    padding: 10px 14px;
-    border-radius: 10px;
-    text-align: center;
-    font-weight: 700;
-    font-size: 28px;
-    margin: 8px 0 18px 0;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.10);
+      padding: 10px 14px;
+      border-radius: 12px;
+      text-align: center;
+      font-weight: 800;
+      font-size: 22px;
+      margin: 8px 0 10px 0;
     }
 
-    /* ať jsou tabulky čitelné i na 100% */
+    /* tabulky full width v rámci sloupce */
     div[data-testid="stDataFrame"] { width: 100% !important; }
     div[data-testid="stDataFrame"] table { width: 100% !important; }
 
-    /* menší písmo v tabulkách */
-    div[data-testid="stDataFrame"] * { font-size: 13px !important; }
+    /* trochu menší písmo, ať se vejde "Zápas" na 100% zoom */
+    div[data-testid="stDataFrame"] * { font-size: 12.5px !important; }
+
     </style>
     """, unsafe_allow_html=True)
 
@@ -399,27 +402,68 @@ with tab1:
 
     active_out = active_ranked_df.drop(columns=["__ranked", "__elo_num", "__ld"])
 
-    st.markdown('<div class="section-bar">Aktuální žebříček ELO</div>', unsafe_allow_html=True)
-
     df_all = load_data()
     last5_df = get_last_matches(df_all, n=5)
+
+    # --- SPODNÍ TABULKA = inactive ranked + unranked (dáme do jedné tabulky s hlavní) ---
+    inactive_ranked_df = inactive_ranked_df.sort_values("__elo_num", ascending=False).reset_index(drop=True)
+    inactive_ranked_df.insert(0, "#", ["inactive"] * len(inactive_ranked_df))
+    inactive_ranked_out = inactive_ranked_df.drop(columns=["__ranked", "__elo_num", "__ld"])
+
+    unranked_df = unranked_df.sort_values("__elo_num", ascending=False).reset_index(drop=True)
+    unranked_df.insert(0, "#", ["unranked"] * len(unranked_df))
+    unranked_df["ELO"] = "0(0)"
+    unranked_out = unranked_df.drop(columns=["__ranked", "__elo_num"])
+
+    # separator řádek (šedý pruh uvnitř tabulky)
+    sep = {c: "" for c in active_out.columns}
+    sep["Hráč"] = "Hráči bez zápasu za posledních 30 dní"
+    sep_row = pd.DataFrame([sep])
+
+    players_out = pd.concat([active_out, sep_row, inactive_ranked_out, unranked_out], ignore_index=True)
+
+    DELTA_COL = "ELO změna celkem (poslední zápas)"
+
+    def _delta_color(v):
+        s = str(v).strip()
+        if (not s) or ("Hráči bez zápasu" in s) or (s == "0(0)"):
+            return "color: rgba(255,255,255,0.55);"
+        try:
+            main = s.split("(", 1)[0].strip()  # "+22" nebo "-9"
+            n = int(main)
+            if n > 0:
+                return "color: #2ecc71; font-weight: 700;"
+            if n < 0:
+                return "color: #e74c3c; font-weight: 700;"
+            return "color: rgba(255,255,255,0.75);"
+        except:
+            return "color: rgba(255,255,255,0.75);"
+
+    def _row_style(row):
+        if str(row.get("Hráč", "")) == "Hráči bez zápasu za posledních 30 dní":
+            return [
+                "background-color: rgba(255,255,255,0.08);"
+                "color: rgba(255,255,255,0.55);"
+                "font-weight: 700;"
+            ] * len(row)
+        return [""] * len(row)
+
+    players_styler = (
+        players_out.style
+            .apply(_row_style, axis=1)
+            .applymap(_delta_color, subset=[DELTA_COL])
+            .set_properties(**{'text-align': 'center'})
+            .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}])
+    )
 
     left, right = st.columns([3, 2], gap="large")
 
     with left:
-        st.dataframe(
-            active_out.style
-                .set_properties(**{'text-align': 'center'})
-                .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]),
-            use_container_width=True,
-            hide_index=True
-        )
+        st.markdown('<div class="section-bar">Aktuální žebříček ELO</div>', unsafe_allow_html=True)
+        st.dataframe(players_styler, use_container_width=True, hide_index=True)
 
     with right:
-        st.markdown(
-            '<div style="text-align:center;font-weight:700;font-size:20px;margin-top:6px;">Posledních 5 zápasů</div>',
-            unsafe_allow_html=True
-        )
+        st.markdown('<div class="section-bar">Posledních 5 zápasů</div>', unsafe_allow_html=True)
         st.dataframe(
             last5_df.style
                 .set_properties(**{'text-align': 'center'})
@@ -427,32 +471,6 @@ with tab1:
             use_container_width=True,
             hide_index=True
         )
-
-    # --- SPODNÍ TABULKA = inactive ranked + unranked ---
-    inactive_ranked_df = inactive_ranked_df.sort_values("__elo_num", ascending=False).reset_index(drop=True)
-    inactive_ranked_df.insert(0, "#", ["inactive"] * len(inactive_ranked_df))
-
-    inactive_ranked_out = inactive_ranked_df.drop(columns=["__ranked", "__elo_num", "__ld"])
-
-    # unranked: rank = "unranked", ELO = "0(0)" (jen zobrazení)
-    unranked_df = unranked_df.sort_values("__elo_num", ascending=False).reset_index(drop=True)
-    unranked_df.insert(0, "#", ["unranked"] * len(unranked_df))
-    unranked_df["ELO"] = "0(0)"
-    unranked_out = unranked_df.drop(columns=["__ranked", "__elo_num"])
-    st.markdown('<div style="height:10px"></div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div style="text-align:center;font-weight:700;font-size:22px;margin:10px 0 10px 0;">Hráči bez zápasu za posledních 30 dní</div>',
-        unsafe_allow_html=True
-    )
-
-    inactive_out = pd.concat([inactive_ranked_out, unranked_out], ignore_index=True)
-    st.dataframe(
-        inactive_out.style
-            .set_properties(**{'text-align': 'center'})
-            .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]),
-        use_container_width=True,
-        hide_index=True
-    )
 
     df_all = load_data()
     all_players = sorted(list(set(list(ratings.keys()))))
@@ -483,7 +501,7 @@ with tab2:
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("Nový zápas")
+        bar("Nový zápas")
         m_type = st.radio("Typ zápasu", ["Singles", "Doubles"])
         is_friendly = st.checkbox("Přátelák (nezapočítává se do ELO)")
         date = st.date_input("Datum", datetime.now())
@@ -537,7 +555,7 @@ with tab2:
     st.divider()
     
     # Úpravy ELO a přidání hráče
-    st.subheader("Manuální úpravy a noví hráči")
+    bar("Upravit existující ELO")
     adj_col1, adj_col2 = st.columns(2)
     
     with adj_col1:
@@ -550,7 +568,7 @@ with tab2:
             st.rerun()
             
     with adj_col2:
-        st.write("**Přidat nového hráče**")
+        bar("Přidat nového hráče")
         new_name = st.text_input("Jméno nového hráče")
         new_elo = st.number_input("Startovní ELO", value=1000, step=10)
         if st.button("Přidat hráče"):
@@ -564,7 +582,7 @@ with tab2:
 
 # --- TAB 3: HISTORIE ---
 with tab3:
-    st.header("Kompletní historie zápasů")
+    bar("Kompletní historie zápasů")
     df_hist = load_data()
     # Zobrazení od nejnovějšího
     st.dataframe(df_hist.iloc[::-1].style.set_properties(**{'text-align': 'center'}).set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]), use_container_width=False)
