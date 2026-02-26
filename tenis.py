@@ -48,7 +48,7 @@ INITIAL_RATINGS = {
 }
 
 # --- FUNKCE PRO DATA ---
-COLUMNS = ["date", "type", "team_a", "team_b", "winner", "score", "sets", "reason"]
+COLUMNS = ["date", "type", "team_a", "team_b", "winner", "score", "sets", "reason", "author"]
 
 @st.cache_data(ttl=10)
 def load_data():
@@ -310,6 +310,8 @@ def build_full_history(df: pd.DataFrame) -> pd.DataFrame:
         winner = str(r.get("winner", "")).strip()
         score = str(r.get("score", "")).strip()
         reason = str(r.get("reason", "")).strip()
+        # --- NOVÉ: Načtení autora ---
+        author = str(r.get("author", "")).strip()
 
         # --- ADJUST (1 řádek) ---
         if rtype == "adjust":
@@ -341,7 +343,8 @@ def build_full_history(df: pd.DataFrame) -> pd.DataFrame:
                 "Zápas": zapas,
                 "Důvod": duvod,
                 "Výsledek": "",
-                "Skóre": ""
+                "Skóre": "",
+                "Zapsal": author  # --- PŘIDÁNO ---
             })
             continue
 
@@ -378,7 +381,6 @@ def build_full_history(df: pd.DataFrame) -> pd.DataFrame:
 
             zapas = f"{' + '.join(team_a)} 🆚 {' + '.join(team_b)}"
 
-            # Výsledek beru z pohledu team_a
             if winner == "A":
                 vysledek = "Výhra Týmu A"
             elif winner == "B":
@@ -392,12 +394,13 @@ def build_full_history(df: pd.DataFrame) -> pd.DataFrame:
                 "Zápas": zapas,
                 "Důvod": "",
                 "Výsledek": vysledek,
-                "Skóre": score
+                "Skóre": score,
+                "Zapsal": author  # --- PŘIDÁNO ---
             })
             continue
 
     if not out:
-        return pd.DataFrame(columns=["Datum", "Typ", "Zápas", "Důvod", "Výsledek", "Skóre"])
+        return pd.DataFrame(columns=["Datum", "Typ", "Zápas", "Důvod", "Výsledek", "Skóre", "Zapsal"])
 
     # od nejnovějšího
     return pd.DataFrame(out).iloc[::-1].reset_index(drop=True)
@@ -1114,7 +1117,8 @@ with tab2:
                     "winner": winner,
                     "score": score,
                     "sets": sets,
-                    "reason": ""
+                    "reason": "",
+                    "author": st.session_state["username"]  # PŘIDAT TENTO ŘÁDEK
                 })
 
                 st.session_state["_match_saved"] = True
@@ -1140,7 +1144,8 @@ with tab2:
                         "type": "adjust",
                         "team_a": adj_player,
                         "team_b": adj_delta,
-                        "reason": adj_reason
+                        "reason": adj_reason,
+                        "author": st.session_state["username"]  # PŘIDAT TENTO ŘÁDEK
                     })
                     st.session_state["_elo_adjusted"] = True
                     st.session_state["_clear_adj"] = True
