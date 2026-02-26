@@ -332,10 +332,6 @@ DF_JSON = DF_ALL.to_json(orient="split")
 ratings, last_date, total_delta, last_delta, played_elo_match = compute_elo_cached(DF_JSON)
 all_players = sorted(ratings.keys())
 
-# načti sheet JEDNOU pro celý run (tabs se i tak vykonají všechny)
-DF_ALL = load_data()
-
-
 
 # --- TAB 1: ŽEBŘÍČEK ---
 with tab1:
@@ -397,7 +393,8 @@ with tab1:
     </style>
     """, unsafe_allow_html=True)
 
-    ratings, last_date, total_delta, last_delta, played_elo_match = compute_elo_with_meta()
+# už NEVOLAT compute_elo_with_meta()
+# ratings, last_date, total_delta, last_delta, played_elo_match už jsou z compute_elo_cached(DF_JSON)
 
     rows = []
     for p, elo in ratings.items():
@@ -650,7 +647,7 @@ with tab1:
 # --- TAB 1.5: SINGLES A DOUBLES ---
 with tab_sd:
     df_sd = DF_ALL
-    ratings_sd, *_ = compute_elo_with_meta()
+    ratings_sd = ratings
     
     # Session state pro přepínání tlačítek
     if "sd_view" not in st.session_state:
@@ -855,7 +852,7 @@ with tab_sd:
             st.markdown("".join(parts), unsafe_allow_html=True)
 # --- TAB 2: ZADÁNÍ ZÁPASU ---
 with tab2:
-    all_players = sorted(compute_elo_with_meta()[0].keys())
+    # all_players už je globálně nahoře
     col1, col2 = st.columns(2)
     
     with col1:
