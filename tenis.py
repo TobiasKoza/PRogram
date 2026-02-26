@@ -623,8 +623,39 @@ with tab2:
                 st.error("Tento hráč už existuje.")
 
 # --- TAB 3: HISTORIE ---
+# --- TAB 3: HISTORIE ---
 with tab3:
     bar("Kompletní historie zápasů")
+
+    st.markdown("""
+    <style>
+      /* TAB 3 – šířka sloupců podle obsahu (nejdelší text), horizontální scroll */
+      div[data-testid="stDataFrame"] { width: 100% !important; overflow-x: auto !important; }
+      div[data-testid="stDataFrame"] table {
+        table-layout: auto !important;
+        width: max-content !important;
+      }
+      div[data-testid="stDataFrame"] th, 
+      div[data-testid="stDataFrame"] td {
+        white-space: nowrap !important;
+      }
+    </style>
+    """, unsafe_allow_html=True)
+
     df_hist = load_data()
+
+    # 1) tvrdě omez na požadované sloupce (tím zmizí i jakýkoliv "prázdný" sloupec za reason)
+    df_hist = df_hist[COLUMNS].copy()
+
+    # 2) pro jistotu dropni sloupce s prázdným názvem (když je v Google Sheets prázdná hlavička)
+    df_hist = df_hist.loc[:, [c for c in df_hist.columns if str(c).strip() != ""]]
+
     # Zobrazení od nejnovějšího
-    st.dataframe(df_hist.iloc[::-1].style.set_properties(**{'text-align': 'center'}).set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]), use_container_width=False)
+    st.dataframe(
+        df_hist.iloc[::-1]
+            .style
+            .set_properties(**{'text-align': 'center'})
+            .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]),
+        use_container_width=False,
+        hide_index=True
+    )
