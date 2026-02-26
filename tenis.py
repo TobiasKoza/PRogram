@@ -280,6 +280,7 @@ def build_player_history(df, target):
 
 
 
+
 def build_full_history(df: pd.DataFrame) -> pd.DataFrame:
     ratings = INITIAL_RATINGS.copy()
 
@@ -328,15 +329,18 @@ def build_full_history(df: pd.DataFrame) -> pd.DataFrame:
                 typ = "Přidání hráče"
                 zapas = f"{p} — Nastaveno na {int(round(ratings[p]))}"
                 rozdil = ""
+                duvod = reason
             else:
                 typ = "Úprava ELO"
-                zapas = f"{p} — Manuální úprava — {reason}".strip(" —")
+                zapas = f"{p}"
                 rozdil = f"{'+' if delta >= 0 else ''}{int(delta)}"
+                duvod = reason
 
             out.append({
                 "Datum": rawd,
                 "Typ": typ,
                 "Zápas": zapas,
+                "Důvod": duvod,
                 "Výsledek": "",
                 "Skóre": "",
                 "Rozdíl ELO": rozdil,
@@ -398,6 +402,7 @@ def build_full_history(df: pd.DataFrame) -> pd.DataFrame:
                 "Datum": rawd,
                 "Typ": typ,
                 "Zápas": zapas,
+                "Důvod": "",
                 "Výsledek": vysledek,
                 "Skóre": score,
                 "Rozdíl ELO": rozdil,
@@ -406,7 +411,7 @@ def build_full_history(df: pd.DataFrame) -> pd.DataFrame:
             continue
 
     if not out:
-        return pd.DataFrame(columns=["Datum", "Typ", "Zápas", "Výsledek", "Skóre", "Rozdíl ELO", "ELO po"])
+        return pd.DataFrame(columns=["Datum", "Typ", "Zápas", "Důvod", "Výsledek", "Skóre", "Rozdíl ELO", "ELO po"])
 
     # od nejnovějšího
     return pd.DataFrame(out).iloc[::-1].reset_index(drop=True)
