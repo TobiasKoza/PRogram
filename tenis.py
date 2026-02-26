@@ -327,6 +327,9 @@ def bar(text: str):
 # Záložky pro přepínání obsahu
 tab1, tab_sd, tab2, tab3 = st.tabs(["🏆 Žebříček", "🎾 Singles & Doubles", "✍️ Zadat zápas", "📜 Historie"])
 
+# načti sheet JEDNOU pro celý run (tabs se i tak vykonají všechny)
+DF_ALL = load_data()
+
 # --- TAB 1: ŽEBŘÍČEK ---
 with tab1:
     st.markdown("""
@@ -437,7 +440,7 @@ with tab1:
 
     active_out = active_ranked_df.drop(columns=["__ranked", "__elo_num", "__ld"])
 
-    df_all = load_data()
+    df_all = DF_ALL
     # pravá tabulka má mít stejný počet řádků jako levá
 
     # --- SPODNÍ TABULKA = inactive ranked + unranked (dáme do jedné tabulky s hlavní) ---
@@ -544,7 +547,7 @@ with tab1:
         html_right = lastN_df.to_html(index=False, border=0, escape=True)
         st.markdown(f'<div class="hist-wrap">{html_right}</div>', unsafe_allow_html=True)
 
-    df_all = load_data()
+    df_all = DF_ALL
     all_players = sorted(list(set(list(ratings.keys()))))
 
     col_sel, _ = st.columns([3, 7])
@@ -568,7 +571,7 @@ with tab1:
 
 # --- TAB 1.5: SINGLES A DOUBLES ---
 with tab_sd:
-    df_sd = load_data()
+    df_sd = DF_ALL
     ratings_sd, *_ = compute_elo_with_meta()
     
     # --- SINGLES ---
@@ -810,13 +813,11 @@ with tab2:
                 st.error("Tento hráč už existuje.")
 
 # --- TAB 3: HISTORIE ---
-# --- TAB 3: HISTORIE ---
-# --- TAB 3: HISTORIE ---
-# --- TAB 3: HISTORIE ---
+
 with tab3:
     bar("Kompletní historie zápasů")
 
-    df_hist = load_data()
+    df_hist = DF_ALL
 
     # jen požadované sloupce (ať tam není nic navíc z Google Sheets)
     df_hist = df_hist[COLUMNS].copy()
