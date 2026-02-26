@@ -74,7 +74,7 @@ def save_match(row):
     full = {c: "" for c in COLUMNS}
     full.update(row)
 
-    ws.append_row([full[c] for c in COLUMNS], value_input_option="RAW")
+    ws.append_row([full[c] for c in COLUMNS], value_input_option="USER_ENTERED")
 
     load_data.clear()
 
@@ -1078,7 +1078,7 @@ with tab2:
                 with c_a2: p1b = st.selectbox("Tým A - Hráč 2", all_players, index=None, placeholder="— nevybráno —", key="d_a2")
                 
                 c_b1, c_b2 = st.columns(2)
-                with c_b1: p2a = st.selectbox("Tým B - Hráč 1", all_players, placeholder="— nevybráno —", key="d_b1")
+                with c_b1: p2a = st.selectbox("Tým B - Hráč 1", all_players, index=None, placeholder="— nevybráno —", key="d_b1")
                 with c_b2: p2b = st.selectbox("Tým B - Hráč 2", all_players, index=None, placeholder="— nevybráno —", key="d_b2")
                 team_a = f"{p1a}+{p1b}" if (p1a and p1b) else ""
                 team_b = f"{p2a}+{p2b}" if (p2a and p2b) else ""
@@ -1117,7 +1117,7 @@ with tab2:
                     "team_b": team_b,
                     "winner": winner,
                     "score": score,
-                    "sets": f"'{sets}",
+                    "sets": f"'{sets}" if sets else "",
                     "reason": "",
                     "author": st.session_state.get("name", "Neznámý")  # PŘIDAT TENTO ŘÁDEK
                 })
