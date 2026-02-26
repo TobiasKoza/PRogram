@@ -79,10 +79,18 @@ def save_match(row):
     st.cache_data.clear() # Vymaže veškerou paměť aplikace (data i výpočty)
 
 def delete_match_by_row(row_index):
-    ws = get_ws()
-    # Google Sheets čísluje od 1, DF index + header + 1
-    ws.delete_rows(int(row_index))
-    st.cache_data.clear() # Vymaže veškerou paměť aplikace (data i výpočty)
+    if row_index is None or str(row_index) == 'nan' or row_index == "":
+        st.error("Chyba: Nepodařilo se identifikovat řádek v databázi.")
+        return
+    
+    try:
+        ws = get_ws()
+        # Převod na int a smazání
+        idx = int(float(row_index)) 
+        ws.delete_rows(idx)
+        st.cache_data.clear()
+    except Exception as e:
+        st.error(f"Chyba při mazání v Google Sheets: {e}")
 
 @st.cache_data(ttl=600)
 def compute_elo_with_meta():
@@ -289,10 +297,15 @@ def build_player_history(df, target):
 
 
 
-@st.cache_data(ttl=600) # Výsledek si pamatuje 10 minut nebo do smazání cache
+@st.cache_data(ttl=600)
 def build_full_history(df: pd.DataFrame) -> pd.DataFrame:
     ratings = INITIAL_RATINGS.copy()
-
+    
+    # --- TADY JE ZMĚNA ---
+    tmp = df.copy()
+    # Přiřadíme reálné číslo řádku z Google Sheets (index 0 + header 1 + 1 = 2)
+    tmp["sheet_row"] = tmp.index + 2 
+    
     def parse_team(s: str):
         return [x.strip() for x in str(s).split("+") if x.strip()]
 
@@ -302,16 +315,12 @@ def build_full_history(df: pd.DataFrame) -> pd.DataFrame:
         except:
             return None
 
-    def ensure_player(p: str):
-        ratings.setdefault(p, 1000.0)
-
-    # seřadit chronologicky, aby ELO po bylo správně
-    tmp = df.copy()
+    # Teď teprve můžeme řadit - row_idx už zůstane přilepený k zápasu
     tmp["__dt"] = tmp["date"].apply(parse_date)
     tmp = tmp.sort_values("__dt", ascending=True).drop(columns=["__dt"])
+    # ---------------------
 
     out = []
-    tmp["sheet_row"] = tmp.index + 2 # +1 pro header, +1 pro indexování od 1
     for _, r in tmp.iterrows():
         rtype = str(r.get("type", "")).strip()
         rawd = str(r.get("date", "")).strip()
