@@ -574,158 +574,181 @@ with tab_sd:
     df_sd = DF_ALL
     ratings_sd, *_ = compute_elo_with_meta()
     
+    # Session state pro přepínání tlačítek
+    if "sd_view" not in st.session_state:
+        st.session_state["sd_view"] = "Singles"
+
+    # Stylovaná obdélníková tlačítka vedle sebe
+    col_btn1, col_btn2, _ = st.columns([1, 1, 4])
+    with col_btn1:
+        if st.button("🎾 Singles", use_container_width=True, type="primary" if st.session_state["sd_view"] == "Singles" else "secondary"):
+            st.session_state["sd_view"] = "Singles"
+            st.rerun()
+    with col_btn2:
+        if st.button("👥 Doubles", use_container_width=True, type="primary" if st.session_state["sd_view"] == "Doubles" else "secondary"):
+            st.session_state["sd_view"] = "Doubles"
+            st.rerun()
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
     # --- SINGLES ---
-    bar("Žebříček Singles")
-    s_matches = df_sd[df_sd["type"] == "singles"]
-    s_stats = {}
-    
-    for _, r in s_matches.iterrows():
-        p1, p2 = r["team_a"].strip(), r["team_b"].strip()
-        win = r["winner"].strip()
-        if p1 not in s_stats: s_stats[p1] = {"w": 0, "l": 0}
-        if p2 not in s_stats: s_stats[p2] = {"w": 0, "l": 0}
-        if win == "A":
-            s_stats[p1]["w"] += 1; s_stats[p2]["l"] += 1
-        elif win == "B":
-            s_stats[p2]["w"] += 1; s_stats[p1]["l"] += 1
+    if st.session_state["sd_view"] == "Singles":
+        bar("Žebříček Singles")
+        s_matches = df_sd[df_sd["type"] == "singles"]
+        s_stats = {}
+        
+        for _, r in s_matches.iterrows():
+            p1, p2 = r["team_a"].strip(), r["team_b"].strip()
+            win = r["winner"].strip()
+            if p1 not in s_stats: s_stats[p1] = {"w": 0, "l": 0}
+            if p2 not in s_stats: s_stats[p2] = {"w": 0, "l": 0}
+            if win == "A":
+                s_stats[p1]["w"] += 1; s_stats[p2]["l"] += 1
+            elif win == "B":
+                s_stats[p2]["w"] += 1; s_stats[p1]["l"] += 1
+                
+        s_rows = []
+        max_s_games = max([st_s["w"] + st_s["l"] for st_s in s_stats.values()]) if s_stats else 0
+        s_threshold = max_s_games / 3.0
+        
+        for p, st_s in s_stats.items():
+            w, l = st_s["w"], st_s["l"]
+            g = w + l
+            pct = (w / g * 100) if g > 0 else 0
+            elo_val = ratings_sd.get(p, 1000)
+            s_rows.append({
+                "Hráč": p,
+                "__games": g,
+                "__pct": pct,
+                "__wins": w,
+                "ELO": int(round(elo_val)),
+                "Skóre": f"{w}:{l}",
+                "Úspěšnost": f"{pct:.1f}".replace('.', ',') + " %"
+            })
             
-    s_rows = []
-    max_s_games = max([st_s["w"] + st_s["l"] for st_s in s_stats.values()]) if s_stats else 0
-    s_threshold = max_s_games / 3.0
-    
-    for p, st_s in s_stats.items():
-        w, l = st_s["w"], st_s["l"]
-        g = w + l
-        pct = (w / g * 100) if g > 0 else 0
-        elo_val = ratings_sd.get(p, 1000)
-        s_rows.append({
-            "Hráč": p,
-            "__games": g,
-            "__elo": elo_val,
-            "ELO": int(round(elo_val)),
-            "Skóre": f"{w}:{l}",
-            "Úspěšnost": f"{pct:.1f}".replace('.', ',') + " %"
-        })
-        
-    s_df = pd.DataFrame(s_rows)
-    if not s_df.empty:
-        s_active = s_df[s_df["__games"] >= s_threshold].sort_values("__elo", ascending=False).reset_index(drop=True)
-        s_active.insert(0, "#", range(1, len(s_active) + 1))
-        s_active = s_active.drop(columns=["__games", "__elo"])
-        
-        s_inactive = s_df[s_df["__games"] < s_threshold].sort_values("__elo", ascending=False).reset_index(drop=True)
-        s_inactive.insert(0, "#", range(1, len(s_inactive) + 1))
-        s_inactive = s_inactive.drop(columns=["__games", "__elo"])
-        
-        sep_s = {c: " " for c in s_active.columns}
-        sep_s["#"] = " "
-        s_limit_text = f"Hráči s méně než {int(math.ceil(s_threshold))} zápasy"
-        sep_s["Hráč"] = s_limit_text
-        sep_s_row = pd.DataFrame([sep_s])
-        
-        if s_inactive.empty:
-            s_out = s_active
-        elif s_active.empty:
-            s_out = s_inactive
+        s_df = pd.DataFrame(s_rows)
+        if not s_df.empty:
+            # Řazení: 1. úspěšnost, 2. počet výher
+            s_active = s_df[s_df["__games"] >= s_threshold].sort_values(["__pct", "__wins"], ascending=[False, False]).reset_index(drop=True)
+            s_active.insert(0, "#", range(1, len(s_active) + 1))
+            s_active = s_active.drop(columns=["__games", "__pct", "__wins"])
+            
+            s_inactive = s_df[s_df["__games"] < s_threshold].sort_values(["__pct", "__wins"], ascending=[False, False]).reset_index(drop=True)
+            s_inactive.insert(0, "#", range(1, len(s_inactive) + 1))
+            s_inactive = s_inactive.drop(columns=["__games", "__pct", "__wins"])
+            
+            sep_s = {c: " " for c in s_active.columns}
+            sep_s["#"] = " "
+            s_limit_text = f"Hráči s méně než {int(math.ceil(s_threshold))} zápasy"
+            sep_s["Hráč"] = s_limit_text
+            sep_s_row = pd.DataFrame([sep_s])
+            
+            if s_inactive.empty:
+                s_out = s_active
+            elif s_active.empty:
+                s_out = s_inactive
+            else:
+                s_out = pd.concat([s_active, sep_s_row, s_inactive], ignore_index=True)
+                
+            def _s_row_style(row):
+                if str(row.get("Hráč", "")).strip() == s_limit_text:
+                    return ["background-color: rgba(255,255,255,0.09); color: rgba(255,255,255,0.55); font-weight: 800;"] * len(row)
+                if str(row.get("#", "")).strip() != " " and str(row.get("Hráč", "")).strip() in s_inactive["Hráč"].values:
+                    return ["color: rgba(255,255,255,0.55); background-color: rgba(255,255,255,0.03);"] * len(row)
+                return [""] * len(row)
+                
+            def _s_hide_cells(row):
+                if str(row.get("Hráč", "")).strip() == s_limit_text:
+                    return ["text-align: center;" if c == "Hráč" else "color: rgba(255,255,255,0.0);" for c in s_out.columns]
+                return [""] * len(row)
+                
+            html_s = s_out.style.hide(axis="index").apply(_s_row_style, axis=1).apply(_s_hide_cells, axis=1).to_html()
+            st.markdown(f'<div class="hist-wrap">{html_s}</div>', unsafe_allow_html=True)
         else:
-            s_out = pd.concat([s_active, sep_s_row, s_inactive], ignore_index=True)
-            
-        def _s_row_style(row):
-            if str(row.get("Hráč", "")).strip() == s_limit_text:
-                return ["background-color: rgba(255,255,255,0.09); color: rgba(255,255,255,0.55); font-weight: 800;"] * len(row)
-            if str(row.get("#", "")).strip() != " " and str(row.get("Hráč", "")).strip() in s_inactive["Hráč"].values:
-                return ["color: rgba(255,255,255,0.55); background-color: rgba(255,255,255,0.03);"] * len(row)
-            return [""] * len(row)
-            
-        def _s_hide_cells(row):
-            if str(row.get("Hráč", "")).strip() == s_limit_text:
-                return ["text-align: center;" if c == "Hráč" else "color: rgba(255,255,255,0.0);" for c in s_out.columns]
-            return [""] * len(row)
-            
-        html_s = s_out.style.hide(axis="index").apply(_s_row_style, axis=1).apply(_s_hide_cells, axis=1).to_html()
-        st.markdown(f'<div class="hist-wrap">{html_s}</div>', unsafe_allow_html=True)
-    else:
-        st.info("Zatím žádné zápasy.")
+            st.info("Zatím žádné zápasy.")
 
     # --- DOUBLES ---
-    bar("Žebříček Doubles")
-    d_matches = df_sd[df_sd["type"] == "doubles"]
-    d_stats = {}
-    
-    for _, r in d_matches.iterrows():
-        ta = [x.strip() for x in r["team_a"].split("+") if x.strip()]
-        tb = [x.strip() for x in r["team_b"].split("+") if x.strip()]
-        if len(ta) != 2 or len(tb) != 2: continue
+    if st.session_state["sd_view"] == "Doubles":
+        bar("Žebříček Doubles")
+        d_matches = df_sd[df_sd["type"] == "doubles"]
+        d_stats = {}
         
-        ta_key = " + ".join(sorted(ta))
-        tb_key = " + ".join(sorted(tb))
-        win = r["winner"].strip()
-        
-        if ta_key not in d_stats: d_stats[ta_key] = {"w": 0, "l": 0, "p1": ta[0], "p2": ta[1]}
-        if tb_key not in d_stats: d_stats[tb_key] = {"w": 0, "l": 0, "p1": tb[0], "p2": tb[1]}
-        
-        if win == "A":
-            d_stats[ta_key]["w"] += 1; d_stats[tb_key]["l"] += 1
-        elif win == "B":
-            d_stats[tb_key]["w"] += 1; d_stats[ta_key]["l"] += 1
+        for _, r in d_matches.iterrows():
+            ta = [x.strip() for x in r["team_a"].split("+") if x.strip()]
+            tb = [x.strip() for x in r["team_b"].split("+") if x.strip()]
+            if len(ta) != 2 or len(tb) != 2: continue
+            
+            ta_key = " + ".join(sorted(ta))
+            tb_key = " + ".join(sorted(tb))
+            win = r["winner"].strip()
+            
+            if ta_key not in d_stats: d_stats[ta_key] = {"w": 0, "l": 0, "p1": ta[0], "p2": ta[1]}
+            if tb_key not in d_stats: d_stats[tb_key] = {"w": 0, "l": 0, "p1": tb[0], "p2": tb[1]}
+            
+            if win == "A":
+                d_stats[ta_key]["w"] += 1; d_stats[tb_key]["l"] += 1
+            elif win == "B":
+                d_stats[tb_key]["w"] += 1; d_stats[ta_key]["l"] += 1
 
-    d_rows = []
-    max_d_games = max([st_d["w"] + st_d["l"] for st_d in d_stats.values()]) if d_stats else 0
-    d_threshold = max_d_games / 3.0
-    
-    for d_k, st_d in d_stats.items():
-        w, l = st_d["w"], st_d["l"]
-        g = w + l
-        pct = (w / g * 100) if g > 0 else 0
-        avg_elo = (ratings_sd.get(st_d["p1"], 1000) + ratings_sd.get(st_d["p2"], 1000)) / 2.0
-        d_rows.append({
-            "Dvojice": d_k,
-            "__games": g,
-            "__elo": avg_elo,
-            "Průměrné ELO": int(round(avg_elo)),
-            "Skóre": f"{w}:{l}",
-            "Úspěšnost": f"{pct:.1f}".replace('.', ',') + " %"
-        })
+        d_rows = []
+        max_d_games = max([st_d["w"] + st_d["l"] for st_d in d_stats.values()]) if d_stats else 0
+        d_threshold = max_d_games / 3.0
         
-    d_df = pd.DataFrame(d_rows)
-    if not d_df.empty:
-        d_active = d_df[d_df["__games"] >= d_threshold].sort_values("__elo", ascending=False).reset_index(drop=True)
-        d_active.insert(0, "#", range(1, len(d_active) + 1))
-        d_active = d_active.drop(columns=["__games", "__elo"])
-        
-        d_inactive = d_df[d_df["__games"] < d_threshold].sort_values("__elo", ascending=False).reset_index(drop=True)
-        d_inactive.insert(0, "#", range(1, len(d_inactive) + 1))
-        d_inactive = d_inactive.drop(columns=["__games", "__elo"])
-        
-        sep_d = {c: " " for c in d_active.columns}
-        sep_d["#"] = " "
-        d_limit_text = f"Dvojice s méně než {int(math.ceil(d_threshold))} zápasy"
-        sep_d["Dvojice"] = d_limit_text
-        sep_d_row = pd.DataFrame([sep_d])
-        
-        if d_inactive.empty:
-            d_out = d_active
-        elif d_active.empty:
-            d_out = d_inactive
+        for d_k, st_d in d_stats.items():
+            w, l = st_d["w"], st_d["l"]
+            g = w + l
+            pct = (w / g * 100) if g > 0 else 0
+            avg_elo = (ratings_sd.get(st_d["p1"], 1000) + ratings_sd.get(st_d["p2"], 1000)) / 2.0
+            d_rows.append({
+                "Dvojice": d_k,
+                "__games": g,
+                "__pct": pct,
+                "__wins": w,
+                "Průměrné ELO": int(round(avg_elo)),
+                "Skóre": f"{w}:{l}",
+                "Úspěšnost": f"{pct:.1f}".replace('.', ',') + " %"
+            })
+            
+        d_df = pd.DataFrame(d_rows)
+        if not d_df.empty:
+            # Řazení: 1. úspěšnost, 2. počet výher
+            d_active = d_df[d_df["__games"] >= d_threshold].sort_values(["__pct", "__wins"], ascending=[False, False]).reset_index(drop=True)
+            d_active.insert(0, "#", range(1, len(d_active) + 1))
+            d_active = d_active.drop(columns=["__games", "__pct", "__wins"])
+            
+            d_inactive = d_df[d_df["__games"] < d_threshold].sort_values(["__pct", "__wins"], ascending=[False, False]).reset_index(drop=True)
+            d_inactive.insert(0, "#", range(1, len(d_inactive) + 1))
+            d_inactive = d_inactive.drop(columns=["__games", "__pct", "__wins"])
+            
+            sep_d = {c: " " for c in d_active.columns}
+            sep_d["#"] = " "
+            d_limit_text = f"Dvojice s méně než {int(math.ceil(d_threshold))} zápasy"
+            sep_d["Dvojice"] = d_limit_text
+            sep_d_row = pd.DataFrame([sep_d])
+            
+            if d_inactive.empty:
+                d_out = d_active
+            elif d_active.empty:
+                d_out = d_inactive
+            else:
+                d_out = pd.concat([d_active, sep_d_row, d_inactive], ignore_index=True)
+                
+            def _d_row_style(row):
+                if str(row.get("Dvojice", "")).strip() == d_limit_text:
+                    return ["background-color: rgba(255,255,255,0.09); color: rgba(255,255,255,0.55); font-weight: 800;"] * len(row)
+                if str(row.get("#", "")).strip() != " " and str(row.get("Dvojice", "")).strip() in d_inactive["Dvojice"].values:
+                    return ["color: rgba(255,255,255,0.55); background-color: rgba(255,255,255,0.03);"] * len(row)
+                return [""] * len(row)
+                
+            def _d_hide_cells(row):
+                if str(row.get("Dvojice", "")).strip() == d_limit_text:
+                    return ["text-align: center;" if c == "Dvojice" else "color: rgba(255,255,255,0.0);" for c in d_out.columns]
+                return [""] * len(row)
+                
+            html_d = d_out.style.hide(axis="index").apply(_d_row_style, axis=1).apply(_d_hide_cells, axis=1).to_html()
+            st.markdown(f'<div class="hist-wrap">{html_d}</div>', unsafe_allow_html=True)
         else:
-            d_out = pd.concat([d_active, sep_d_row, d_inactive], ignore_index=True)
-            
-        def _d_row_style(row):
-            if str(row.get("Dvojice", "")).strip() == d_limit_text:
-                return ["background-color: rgba(255,255,255,0.09); color: rgba(255,255,255,0.55); font-weight: 800;"] * len(row)
-            if str(row.get("#", "")).strip() != " " and str(row.get("Dvojice", "")).strip() in d_inactive["Dvojice"].values:
-                return ["color: rgba(255,255,255,0.55); background-color: rgba(255,255,255,0.03);"] * len(row)
-            return [""] * len(row)
-            
-        def _d_hide_cells(row):
-            if str(row.get("Dvojice", "")).strip() == d_limit_text:
-                return ["text-align: center;" if c == "Dvojice" else "color: rgba(255,255,255,0.0);" for c in d_out.columns]
-            return [""] * len(row)
-            
-        html_d = d_out.style.hide(axis="index").apply(_d_row_style, axis=1).apply(_d_hide_cells, axis=1).to_html()
-        st.markdown(f'<div class="hist-wrap">{html_d}</div>', unsafe_allow_html=True)
-    else:
-        st.info("Zatím žádné zápasy.")
+            st.info("Zatím žádné zápasy.")
 
 # --- TAB 2: ZADÁNÍ ZÁPASU ---
 with tab2:
