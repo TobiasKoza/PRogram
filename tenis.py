@@ -998,71 +998,29 @@ with tab_sd:
             parts.append("</tbody></table></div>")
 
             st.markdown("".join(parts), unsafe_allow_html=True)
+
+
+# --- TAB 2: ZADÁNÍ ZÁPASU ---
 # --- TAB 2: ZADÁNÍ ZÁPASU ---
 with tab2:
     if st.session_state.get("authentication_status"):
+        # VŠECHNO pod tímto řádkem je nyní odsazené, takže se zobrazí jen přihlášeným
+        
         # 1. Zobrazení vyskakovacích mizejících zpráv (Toasty)
         if st.session_state.get("_match_saved"):
             st.toast("Zápas byl úspěšně uložen!", icon="✅")
             st.session_state["_match_saved"] = False
-        
-        # ... ZDE POKRAČUJE CELÝ TVŮJ SOUČASNÝ KÓD PRO TAB 2 ...
-        # (všechny inputy, tlačítka atd., nezapomeň to všechno odsadit!)
-        # ...
-        
-    else:
-        st.warning("⚠️ Pro zadávání nových zápasů, přidávání hráčů a úpravu ELO se musíš přihlásit v levém panelu.")
-    # 1. Zobrazení vyskakovacích mizejících zpráv (Toasty)
-    if st.session_state.get("_match_saved"):
-        st.toast("Zápas byl úspěšně uložen!", icon="✅")
-        st.session_state["_match_saved"] = False
-        
-    if st.session_state.get("_elo_adjusted"):
-        st.toast("ELO bylo úspěšně upraveno!", icon="✅")
-        st.session_state["_elo_adjusted"] = False
-        
-    if st.session_state.get("_player_added"):
-        st.toast("Nový hráč byl úspěšně přidán!", icon="✅")
-        st.session_state["_player_added"] = False
+            
+        if st.session_state.get("_elo_adjusted"):
+            st.toast("ELO bylo úspěšně upraveno!", icon="✅")
+            st.session_state["_elo_adjusted"] = False
+            
+        if st.session_state.get("_player_added"):
+            st.toast("Nový hráč byl úspěšně přidán!", icon="✅")
+            st.session_state["_player_added"] = False
 
-    # 2. Skutečný a bezpečný reset formulářů před jejich vykreslením
-    if st.session_state.get("_clear_form"):
-        st.session_state["m_type"] = "Singles"
-        st.session_state["is_friendly"] = False
-        st.session_state["match_date"] = datetime.now().date()
-        st.session_state["s1"] = None
-        st.session_state["s2"] = None
-        st.session_state["d_a1"] = None
-        st.session_state["d_a2"] = None
-        st.session_state["d_b1"] = None
-        st.session_state["d_b2"] = None
-        st.session_state["winner_sel"] = "A"
-        st.session_state["score_in"] = ""
-        st.session_state["sets_in"] = ""
-        st.session_state["_clear_form"] = False
-
-    if st.session_state.get("_clear_adj"):
-        st.session_state["adj_p"] = None
-        st.session_state["adj_delta"] = 0
-        st.session_state["adj_reason"] = ""
-        st.session_state["_clear_adj"] = False
-
-    if st.session_state.get("_clear_add"):
-        st.session_state["new_name"] = ""
-        st.session_state["new_elo"] = 1000
-        st.session_state["_clear_add"] = False
-
-
-    all_players = sorted(compute_elo_with_meta()[0].keys())
-    
-    # Šedý obdélník dáme sem nahoru PŘED sloupce, aby byl přes celou šířku
-    bar("Přidat nový zápas")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # INICIALIZACE VÝCHOZÍCH HODNOT (aby Streamlit nepanikařil)
-        if "match_date" not in st.session_state:
+        # 2. Skutečný a bezpečný reset formulářů
+        if st.session_state.get("_clear_form"):
             st.session_state["m_type"] = "Singles"
             st.session_state["is_friendly"] = False
             st.session_state["match_date"] = datetime.now().date()
@@ -1073,138 +1031,143 @@ with tab2:
             st.session_state["d_b1"] = None
             st.session_state["d_b2"] = None
             st.session_state["winner_sel"] = "A"
+            st.session_state["score_in"] = ""
+            st.session_state["sets_in"] = ""
+            st.session_state["_clear_form"] = False
 
-        m_type = st.radio("Typ zápasu", ["Singles", "Doubles"], key="m_type")
-        is_friendly = st.checkbox("Přátelák (nezapočítává se do ELO)", key="is_friendly")
-        date = st.date_input("Datum", key="match_date")
-        
-        # Výběr hráčů podle typu
-        if "Singles" in m_type:
-            p1 = st.selectbox("Hráč A", all_players, placeholder="— nevybráno —", key="s1")
-            p2 = st.selectbox("Hráč B", all_players, placeholder="— nevybráno —", key="s2")
-            team_a = p1 if p1 is not None else ""
-            team_b = p2 if p2 is not None else ""
-        else:
-            c_a1, c_a2 = st.columns(2)
-            with c_a1: p1a = st.selectbox("Tým A - Hráč 1", all_players, placeholder="— nevybráno —", key="d_a1")
-            with c_a2: p1b = st.selectbox("Tým A - Hráč 2", all_players, placeholder="— nevybráno —", key="d_a2")
-            
-            c_b1, c_b2 = st.columns(2)
-            with c_b1: p2a = st.selectbox("Tým B - Hráč 1", all_players, placeholder="— nevybráno —", key="d_b1")
-            with c_b2: p2b = st.selectbox("Tým B - Hráč 2", all_players, placeholder="— nevybráno —", key="d_b2")
-            team_a = f"{p1a}+{p1b}" if (p1a and p1b) else ""
-            team_b = f"{p2a}+{p2b}" if (p2a and p2b) else ""
-            
-    with col2:
-        st.write("") # Odsazení
-        st.write("")
-        # V selectboxu se zobrazí konkrétní jména, ale do kódu se uloží jen "A" nebo "B"
-        winner = st.selectbox("Vítěz", ["A", "B"], format_func=lambda x: team_a if x == "A" else team_b, key="winner_sel")
-        score = st.text_input("Skóre (např. 2:1)", "", key="score_in")
-        sets = st.text_input("Gemy setů (např. 6,4,6)", "", key="sets_in")
-        
-        if st.button("💾 Uložit zápas", use_container_width=True):
-
-            # validace výběrů
-            if m_type == "Singles":
-                if (p1 is None) or (p2 is None):
-                    st.error("Vyber oba hráče.")
-                    st.stop()
-                if p1 == p2:
-                    st.error("Hráči se nesmí opakovat!")
-                    st.stop()
-            else:
-                if (p1a is None) or (p1b is None) or (p2a is None) or (p2b is None):
-                    st.error("Vyber všechny 4 hráče.")
-                    st.stop()
-                if len(set([p1a, p1b, p2a, p2b])) != 4:
-                    st.error("Hráči se nesmí opakovat!")
-                    st.stop()
-
-            # Interní typy pro CSV
-            if m_type == "Singles":
-                db_type = "friendly_singles" if is_friendly else "singles"
-            else:
-                db_type = "friendly_doubles" if is_friendly else "doubles"
-
-            save_match({
-                "date": date.strftime("%d.%m.%Y"),
-                "type": db_type,
-                "team_a": team_a,
-                "team_b": team_b,
-                "winner": winner,
-                "score": score,
-                "sets": sets,
-                "reason": ""
-            })
-
-            # Dáme pokyn k zobrazení zprávy a vyčištění formuláře
-            st.session_state["_match_saved"] = True
-            st.session_state["_clear_form"] = True
-            st.rerun()
-
-    st.divider()
-    
-    # Úpravy ELO a přidání hráče
-    adj_col1, adj_col2 = st.columns(2)
-
-    with adj_col1:
-        bar("Upravit existující ELO")
-        
-        # INICIALIZACE ÚPRAVY ELO
-        if "adj_delta" not in st.session_state:
+        if st.session_state.get("_clear_adj"):
             st.session_state["adj_p"] = None
             st.session_state["adj_delta"] = 0
             st.session_state["adj_reason"] = ""
+            st.session_state["_clear_adj"] = False
 
-        adj_player = st.selectbox("Hráč", all_players, placeholder="— nevybráno —", key="adj_p")
-        adj_delta = st.number_input("Změna (např. 5 nebo -3)", step=1, key="adj_delta")
-        adj_reason = st.text_input("Důvod úpravy", key="adj_reason")
-
-        if st.button("Upravit ELO"):
-            if adj_player is None:
-                st.error("Vyber hráče.")
-            else:
-                save_match({
-                    "date": datetime.now().strftime("%d.%m.%Y"),
-                    "type": "adjust",
-                    "team_a": adj_player,
-                    "team_b": adj_delta,
-                    "reason": adj_reason
-                })
-                # Spuštění Toasta a vyčištění
-                st.session_state["_elo_adjusted"] = True
-                st.session_state["_clear_adj"] = True
-                st.rerun()
-
-    with adj_col2:
-        bar("Přidat nového hráče")
-        
-        # INICIALIZACE PŘIDÁNÍ HRÁČE
-        if "new_elo" not in st.session_state:
+        if st.session_state.get("_clear_add"):
             st.session_state["new_name"] = ""
             st.session_state["new_elo"] = 1000
+            st.session_state["_clear_add"] = False
 
-        new_name = st.text_input("Jméno nového hráče", key="new_name")
-        new_elo = st.number_input("Startovní ELO", step=10, key="new_elo")
+        all_players = sorted(compute_elo_with_meta()[0].keys())
+        
+        bar("Přidat nový zápas")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if "match_date" not in st.session_state:
+                st.session_state["m_date_init"] = datetime.now().date()
 
-        if st.button("Přidat hráče"):
-            if new_name and new_name not in all_players:
-                delta = new_elo - 1000
+            m_type = st.radio("Typ zápasu", ["Singles", "Doubles"], key="m_type")
+            is_friendly = st.checkbox("Přátelák (nezapočítává se do ELO)", key="is_friendly")
+            date = st.date_input("Datum", key="match_date")
+            
+            if "Singles" in m_type:
+                p1 = st.selectbox("Hráč A", all_players, placeholder="— nevybráno —", key="s1")
+                p2 = st.selectbox("Hráč B", all_players, placeholder="— nevybráno —", key="s2")
+                team_a = p1 if p1 is not None else ""
+                team_b = p2 if p2 is not None else ""
+            else:
+                c_a1, c_a2 = st.columns(2)
+                with c_a1: p1a = st.selectbox("Tým A - Hráč 1", all_players, placeholder="— nevybráno —", key="d_a1")
+                with c_a2: p1b = st.selectbox("Tým A - Hráč 2", all_players, placeholder="— nevybráno —", key="d_a2")
+                
+                c_b1, c_b2 = st.columns(2)
+                with c_b1: p2a = st.selectbox("Tým B - Hráč 1", all_players, placeholder="— nevybráno —", key="d_b1")
+                with c_b2: p2b = st.selectbox("Tým B - Hráč 2", all_players, placeholder="— nevybráno —", key="d_b2")
+                team_a = f"{p1a}+{p1b}" if (p1a and p1b) else ""
+                team_b = f"{p2a}+{p2b}" if (p2a and p2b) else ""
+                
+        with col2:
+            st.write("") 
+            st.write("")
+            winner = st.selectbox("Vítěz", ["A", "B"], format_func=lambda x: team_a if x == "A" else team_b, key="winner_sel")
+            score = st.text_input("Skóre (např. 2:1)", key="score_in")
+            sets = st.text_input("Gemy setů (např. 6,4,6)", key="sets_in")
+            
+            if st.button("💾 Uložit zápas", use_container_width=True):
+                if m_type == "Singles":
+                    if (p1 is None) or (p2 is None):
+                        st.error("Vyber oba hráče.")
+                        st.stop()
+                    if p1 == p2:
+                        st.error("Hráči se nesmí opakovat!")
+                        st.stop()
+                else:
+                    if (p1a is None) or (p1b is None) or (p2a is None) or (p2b is None):
+                        st.error("Vyber všechny 4 hráče.")
+                        st.stop()
+                    if len(set([p1a, p1b, p2a, p2b])) != 4:
+                        st.error("Hráči se nesmí opakovat!")
+                        st.stop()
+
+                db_type = "friendly_singles" if is_friendly and m_type == "Singles" else \
+                          "friendly_doubles" if is_friendly and m_type == "Doubles" else \
+                          "singles" if m_type == "Singles" else "doubles"
+
                 save_match({
-                    "date": datetime.now().strftime("%d.%m.%Y"),
-                    "type": "adjust",
-                    "team_a": new_name,
-                    "team_b": delta,
-                    "reason": f"Přidání hráče({new_elo} ELO)"
+                    "date": date.strftime("%d.%m.%Y"),
+                    "type": db_type,
+                    "team_a": team_a,
+                    "team_b": team_b,
+                    "winner": winner,
+                    "score": score,
+                    "sets": sets,
+                    "reason": ""
                 })
-                # Spuštění Toasta a vyčištění
-                st.session_state["_player_added"] = True
-                st.session_state["_clear_add"] = True
-                st.rerun()
-            elif new_name in all_players:
-                st.error("Tento hráč už existuje.")
 
+                st.session_state["_match_saved"] = True
+                st.session_state["_clear_form"] = True
+                st.rerun()
+
+        st.divider()
+        
+        adj_col1, adj_col2 = st.columns(2)
+
+        with adj_col1:
+            bar("Upravit existující ELO")
+            adj_player = st.selectbox("Hráč", all_players, placeholder="— nevybráno —", key="adj_p")
+            adj_delta = st.number_input("Změna (např. 5 nebo -3)", step=1, key="adj_delta")
+            adj_reason = st.text_input("Důvod úpravy", key="adj_reason")
+
+            if st.button("Upravit ELO"):
+                if adj_player is None:
+                    st.error("Vyber hráče.")
+                else:
+                    save_match({
+                        "date": datetime.now().strftime("%d.%m.%Y"),
+                        "type": "adjust",
+                        "team_a": adj_player,
+                        "team_b": adj_delta,
+                        "reason": adj_reason
+                    })
+                    st.session_state["_elo_adjusted"] = True
+                    st.session_state["_clear_adj"] = True
+                    st.rerun()
+
+        with adj_col2:
+            bar("Přidat nového hráče")
+            new_name = st.text_input("Jméno nového hráče", key="new_name")
+            new_elo = st.number_input("Startovní ELO", step=10, key="new_elo")
+
+            if st.button("Přidat hráče"):
+                if new_name and new_name not in all_players:
+                    delta = new_elo - 1000
+                    save_match({
+                        "date": datetime.now().strftime("%d.%m.%Y"),
+                        "type": "adjust",
+                        "team_a": new_name,
+                        "team_b": delta,
+                        "reason": f"Přidání hráče({new_elo} ELO)"
+                    })
+                    st.session_state["_player_added"] = True
+                    st.session_state["_clear_add"] = True
+                    st.rerun()
+                elif new_name in all_players:
+                    st.error("Tento hráč už existuje.")
+                    
+    else:
+        # TOTO se zobrazí, pokud uživatel není přihlášen
+        st.warning("⚠️ Pro zadávání nových zápasů, přidávání hráčů a úpravu ELO se musíš přihlásit v levém panelu.")
+        st.info("Bez přihlášení je možné pouze prohlížet žebříčky a historii.")
 
 # --- TAB 3: HISTORIE ---
 
