@@ -625,14 +625,61 @@ with tab2:
 # --- TAB 3: HISTORIE ---
 # --- TAB 3: HISTORIE ---
 # --- TAB 3: HISTORIE ---
+# --- TAB 3: HISTORIE ---
 with tab3:
-    bar("Kompletní historie zápasů a událostí")
+    bar("Kompletní historie zápasů")
+
     df_hist = load_data()
-    # Zobrazení od nejnovějšího (hide_index=True schová extra sloupec a use_container_width=False stáhne šířku)
-    st.dataframe(
-        df_hist.iloc[::-1].style
-            .set_properties(**{'text-align': 'center'})
-            .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]),
-        use_container_width=False,
-        hide_index=True
-    )
+
+    # jen požadované sloupce (ať tam není nic navíc z Google Sheets)
+    df_hist = df_hist[COLUMNS].copy()
+    df_hist = df_hist.loc[:, [c for c in df_hist.columns if str(c).strip() != ""]]
+
+    # od nejnovějšího
+    df_hist = df_hist.iloc[::-1].copy()
+
+    st.markdown("""
+    <style>
+      /* TAB 3 = vlastní HTML tabulka, šířky podle obsahu, žádný filler sloupec */
+      .hist-wrap{
+        width: 100%;
+        overflow-x: auto;
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 12px;
+        background: rgba(0,0,0,0.10);
+      }
+      table.hist-table{
+        border-collapse: collapse;
+        table-layout: auto;
+        width: max-content;      /* šířka podle nejdelších hodnot */
+        min-width: 100%;         /* když je krátká, vyplní wrapper */
+      }
+      table.hist-table thead th{
+        position: sticky;
+        top: 0;
+        background: rgba(255,255,255,0.06);
+        border-bottom: 1px solid rgba(255,255,255,0.10);
+        font-weight: 800;
+        text-align: center;
+      }
+      table.hist-table th, table.hist-table td{
+        padding: 10px 12px;
+        border-right: 1px solid rgba(255,255,255,0.06);
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        white-space: nowrap;     /* neláme text, šířky podle obsahu */
+        text-align: center;
+        font-size: 12.5px;
+        color: rgba(255,255,255,0.90);
+      }
+      table.hist-table th:last-child, table.hist-table td:last-child{
+        border-right: none;
+      }
+      table.hist-table tr:last-child td{
+        border-bottom: none;
+      }
+    </style>
+    """, unsafe_allow_html=True)
+
+    html_table = df_hist.to_html(index=False, classes="hist-table", border=0, escape=True)
+
+    st.markdown(f'<div class="hist-wrap">{html_table}</div>', unsafe_allow_html=True)
