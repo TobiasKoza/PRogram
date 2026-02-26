@@ -74,19 +74,20 @@ def save_match(row):
     ws.append_row([full[c] for c in COLUMNS], value_input_option="USER_ENTERED")
 
     load_data.clear()
+    compute_elo_cached.clear()
 
 
-def compute_elo_with_meta():
+@st.cache_data(ttl=10)
+def compute_elo_cached(df_json: str):
+    df = pd.read_json(df_json, orient="split")
+
     ratings = INITIAL_RATINGS.copy()
-    df = load_data()
-
-    # startovní ELO pro výpočet total_delta
     base = {p: float(v) for p, v in ratings.items()}
 
-    last_date = {}          # poslední zápas (singles/doubles/friendly)
-    total_delta = {}        # finální - start
-    last_delta = {}         # poslední změna (ranked/adjust; friendly=0)
-    played_elo_match = {}   # měl někdy ranked match (singles/doubles)
+    last_date = {}
+    total_delta = {}
+    last_delta = {}
+    played_elo_match = {}
 
     def parse_team(s: str):
         return [x.strip() for x in str(s).split("+") if x.strip()]
@@ -108,14 +109,12 @@ def compute_elo_with_meta():
         rtype = str(r.get("type", "")).strip()
         d = parse_date(r.get("date", ""))
 
-        # --- adjust ---
         if rtype == "adjust":
             p = str(r.get("team_a", "")).strip()
             try:
                 delta = float(r.get("team_b", 0))
             except:
                 delta = 0.0
-
             ensure_player(p)
             ratings[p] += delta
             last_delta[p] = delta
@@ -123,11 +122,9 @@ def compute_elo_with_meta():
                 last_date[p] = d
             continue
 
-        # --- friendly ---
         if rtype in ["friendly_singles", "friendly_doubles"]:
             team_a = parse_team(r.get("team_a", ""))
             team_b = parse_team(r.get("team_b", ""))
-
             for p in team_a + team_b:
                 ensure_player(p)
                 last_delta[p] = 0.0
@@ -135,7 +132,6 @@ def compute_elo_with_meta():
                     last_date[p] = d
             continue
 
-        # --- ranked matches ---
         if rtype in ["singles", "doubles"]:
             team_a = parse_team(r.get("team_a", ""))
             team_b = parse_team(r.get("team_b", ""))
@@ -169,8 +165,7 @@ def compute_elo_with_meta():
                 if d:
                     last_date[p] = d
 
-    # total delta = finální - start (base)
-    for p in ratings.keys():
+    for p in list(ratings.keys()):
         ensure_player(p)
         total_delta[p] = ratings[p] - base.get(p, 1000.0)
 
@@ -318,6 +313,9 @@ def get_last_matches(df: pd.DataFrame, n: int = 5) -> pd.DataFrame:
     })
 
     return out
+
+
+
 # --- UI STREAMLIT ---
 st.set_page_config(page_title="Tennis ELO Žebříček", page_icon="🎾", layout="wide")
 st.title("🎾 Tennis ELO — Zápisy a Žebříček")
@@ -325,10 +323,19 @@ def bar(text: str):
     st.markdown(f'<div class="section-bar">{text}</div>', unsafe_allow_html=True)
 
 # Záložky pro přepínání obsahu
-tab1, tab_sd, tab2, tab3 = st.tabs(["🏆 Žebříček", "🎾 Singles & Doubles", "✍️ Zadat zápas nebo přidat hráče", "📜 Kompletní historie"])
+tab1, tab_sd, tab2, tab3 = st.tabs(["🏆 Žebříček", "🎾 Singles & Doubles", "✍️ Zadat zápas", "📜 Historie"])
+
+# Načtení dat a výpočet ELO JEN JEDNOU díky cachování
+DF_ALL = load_data()
+DF_JSON = DF_ALL.to_json(orient="split")
+
+ratings, last_date, total_delta, last_delta, played_elo_match = compute_elo_cached(DF_JSON)
+all_players = sorted(ratings.keys())
 
 # načti sheet JEDNOU pro celý run (tabs se i tak vykonají všechny)
 DF_ALL = load_data()
+
+
 
 # --- TAB 1: ŽEBŘÍČEK ---
 with tab1:
