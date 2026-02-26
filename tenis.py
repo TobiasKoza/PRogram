@@ -1045,31 +1045,48 @@ with tab2:
     st.divider()
     
     # Úpravy ELO a přidání hráče
-    bar("Upravit existující ELO")
     adj_col1, adj_col2 = st.columns(2)
-    
+
     with adj_col1:
-        st.write("**Upravit existující ELO**")
-        adj_player = st.selectbox("Hráč", all_players, key="adj_p")
+        bar("Upravit existující ELO")
+
+        adj_player = st.selectbox("Hráč", all_players, index=None, placeholder="— nevybráno —", key="adj_p")
         adj_delta = st.number_input("Změna (např. 5 nebo -3)", step=1, value=0)
         adj_reason = st.text_input("Důvod úpravy")
+
         if st.button("Upravit ELO"):
-            save_match({"date": datetime.now().strftime("%d.%m.%Y"), "type": "adjust", "team_a": adj_player, "team_b": adj_delta, "reason": adj_reason})
-            st.rerun()
-            
+            if adj_player is None:
+                st.error("Vyber hráče.")
+            else:
+                save_match({
+                    "date": datetime.now().strftime("%d.%m.%Y"),
+                    "type": "adjust",
+                    "team_a": adj_player,
+                    "team_b": adj_delta,
+                    "reason": adj_reason
+                })
+                st.rerun()
+
     with adj_col2:
         bar("Přidat nového hráče")
+
         new_name = st.text_input("Jméno nového hráče")
         new_elo = st.number_input("Startovní ELO", value=1000, step=10)
+
         if st.button("Přidat hráče"):
             if new_name and new_name not in all_players:
                 delta = new_elo - 1000
-                save_match({"date": datetime.now().strftime("%d.%m.%Y"), "type": "adjust", "team_a": new_name, "team_b": delta, "reason": f"Přidání hráče({new_elo} ELO)"})
+                save_match({
+                    "date": datetime.now().strftime("%d.%m.%Y"),
+                    "type": "adjust",
+                    "team_a": new_name,
+                    "team_b": delta,
+                    "reason": f"Přidání hráče({new_elo} ELO)"
+                })
                 st.success(f"Hráč {new_name} přidán!")
                 st.rerun()
             elif new_name in all_players:
                 st.error("Tento hráč už existuje.")
-
 # --- TAB 3: HISTORIE ---
 
 with tab3:
