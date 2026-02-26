@@ -986,9 +986,27 @@ with tab_sd:
             st.markdown("".join(parts), unsafe_allow_html=True)
 # --- TAB 2: ZADÁNÍ ZÁPASU ---
 with tab2:
-    if st.session_state.get("_match_saved", False):
-        st.success("Zápas byl úspěšně uložen!")
+    # 1. Zobrazení vyskakovací mizející zprávy (Toast)
+    if st.session_state.get("_match_saved"):
+        st.toast("Zápas byl úspěšně uložen!", icon="✅")
         st.session_state["_match_saved"] = False
+
+    # 2. Skutečný a bezpečný reset formuláře před jeho vykreslením
+    if st.session_state.get("_clear_form"):
+        st.session_state["m_type"] = "Singles"
+        st.session_state["is_friendly"] = False
+        st.session_state["match_date"] = datetime.now().date()
+        st.session_state["s1"] = None
+        st.session_state["s2"] = None
+        st.session_state["d_a1"] = None
+        st.session_state["d_a2"] = None
+        st.session_state["d_b1"] = None
+        st.session_state["d_b2"] = None
+        st.session_state["winner_sel"] = "A"
+        st.session_state["score_in"] = ""
+        st.session_state["sets_in"] = ""
+        st.session_state["_clear_form"] = False
+
     all_players = sorted(compute_elo_with_meta()[0].keys())
     col1, col2 = st.columns(2)
     
@@ -1058,20 +1076,9 @@ with tab2:
                 "reason": ""
             })
 
-            # flag pro success po rerunu
+            # Dáme pokyn k zobrazení zprávy a vyčištění formuláře
             st.session_state["_match_saved"] = True
-
-            # RESET formuláře - bezpečné smazání klíčů
-            keys_to_reset = [
-                "m_type", "is_friendly", "match_date", 
-                "s1", "s2", "d_a1", "d_a2", "d_b1", "d_b2", 
-                "winner_sel", "score_in", "sets_in"
-            ]
-            
-            for key in keys_to_reset:
-                if key in st.session_state:
-                    del st.session_state[key]
-
+            st.session_state["_clear_form"] = True
             st.rerun()
 
     st.divider()
