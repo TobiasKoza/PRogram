@@ -74,20 +74,19 @@ def save_match(row):
     ws.append_row([full[c] for c in COLUMNS], value_input_option="USER_ENTERED")
 
     load_data.clear()
-    compute_elo_cached.clear()
 
 
-@st.cache_data(ttl=10)
-def compute_elo_cached(df_json: str):
-    df = pd.read_json(df_json, orient="split")
-
+def compute_elo_with_meta():
     ratings = INITIAL_RATINGS.copy()
+    df = load_data()
+
+    # startovní ELO pro výpočet total_delta
     base = {p: float(v) for p, v in ratings.items()}
 
-    last_date = {}
-    total_delta = {}
-    last_delta = {}
-    played_elo_match = {}
+    last_date = {}          # poslední zápas (singles/doubles/friendly)
+    total_delta = {}        # finální - start
+    last_delta = {}         # poslední změna (ranked/adjust; friendly=0)
+    played_elo_match = {}   # měl někdy ranked match (singles/doubles)
 
     def parse_team(s: str):
         return [x.strip() for x in str(s).split("+") if x.strip()]
@@ -109,12 +108,14 @@ def compute_elo_cached(df_json: str):
         rtype = str(r.get("type", "")).strip()
         d = parse_date(r.get("date", ""))
 
+        # --- adjust ---
         if rtype == "adjust":
             p = str(r.get("team_a", "")).strip()
             try:
                 delta = float(r.get("team_b", 0))
             except:
                 delta = 0.0
+
             ensure_player(p)
             ratings[p] += delta
             last_delta[p] = delta
@@ -122,9 +123,11 @@ def compute_elo_cached(df_json: str):
                 last_date[p] = d
             continue
 
+        # --- friendly ---
         if rtype in ["friendly_singles", "friendly_doubles"]:
             team_a = parse_team(r.get("team_a", ""))
             team_b = parse_team(r.get("team_b", ""))
+
             for p in team_a + team_b:
                 ensure_player(p)
                 last_delta[p] = 0.0
@@ -132,6 +135,7 @@ def compute_elo_cached(df_json: str):
                     last_date[p] = d
             continue
 
+        # --- ranked matches ---
         if rtype in ["singles", "doubles"]:
             team_a = parse_team(r.get("team_a", ""))
             team_b = parse_team(r.get("team_b", ""))
@@ -165,7 +169,8 @@ def compute_elo_cached(df_json: str):
                 if d:
                     last_date[p] = d
 
-    for p in list(ratings.keys()):
+    # total delta = finální - start (base)
+    for p in ratings.keys():
         ensure_player(p)
         total_delta[p] = ratings[p] - base.get(p, 1000.0)
 
@@ -313,9 +318,6 @@ def get_last_matches(df: pd.DataFrame, n: int = 5) -> pd.DataFrame:
     })
 
     return out
-
-
-
 # --- UI STREAMLIT ---
 st.set_page_config(page_title="Tennis ELO Žebříček", page_icon="🎾", layout="wide")
 st.title("🎾 Tennis ELO — Zápisy a Žebříček")
@@ -323,15 +325,10 @@ def bar(text: str):
     st.markdown(f'<div class="section-bar">{text}</div>', unsafe_allow_html=True)
 
 # Záložky pro přepínání obsahu
-tab1, tab_sd, tab2, tab3 = st.tabs(["🏆 Žebříček", "🎾 Singles & Doubles", "✍️ Zadat zápas", "📜 Historie"])
+tab1, tab_sd, tab2, tab3 = st.tabs(["🏆 Žebříček", "🎾 Singles & Doubles", "✍️ Zadat zápas nebo přidat hráče", "📜 Kompletní historie"])
 
-# Načtení dat a výpočet ELO JEN JEDNOU díky cachování
+# načti sheet JEDNOU pro celý run (tabs se i tak vykonají všechny)
 DF_ALL = load_data()
-DF_JSON = DF_ALL.to_json(orient="split")
-
-ratings, last_date, total_delta, last_delta, played_elo_match = compute_elo_cached(DF_JSON)
-all_players = sorted(ratings.keys())
-
 
 # --- TAB 1: ŽEBŘÍČEK ---
 with tab1:
@@ -393,8 +390,7 @@ with tab1:
     </style>
     """, unsafe_allow_html=True)
 
-# už NEVOLAT compute_elo_with_meta()
-# ratings, last_date, total_delta, last_delta, played_elo_match už jsou z compute_elo_cached(DF_JSON)
+    ratings, last_date, total_delta, last_delta, played_elo_match = compute_elo_with_meta()
 
     rows = []
     for p, elo in ratings.items():
@@ -647,7 +643,7 @@ with tab1:
 # --- TAB 1.5: SINGLES A DOUBLES ---
 with tab_sd:
     df_sd = DF_ALL
-    ratings_sd = ratings
+    ratings_sd, *_ = compute_elo_with_meta()
     
     # Session state pro přepínání tlačítek
     if "sd_view" not in st.session_state:
@@ -852,7 +848,7 @@ with tab_sd:
             st.markdown("".join(parts), unsafe_allow_html=True)
 # --- TAB 2: ZADÁNÍ ZÁPASU ---
 with tab2:
-    # all_players už je globálně nahoře
+    all_players = sorted(compute_elo_with_meta()[0].keys())
     col1, col2 = st.columns(2)
     
     with col1:
@@ -869,19 +865,13 @@ with tab2:
             team_b = p2 if p2 is not None else ""
         else:
             c_a1, c_a2 = st.columns(2)
-            with c_a1:
-                p1a = st.selectbox("Tým A - Hráč 1", all_players, index=None, placeholder="— nevybráno —", key="d_a1")
-            with c_a2:
-                p1b = st.selectbox("Tým A - Hráč 2", all_players, index=None, placeholder="— nevybráno —", key="d_a2")
-
+            with c_a1: p1a = st.selectbox("Tým A - Hráč 1", players_pick, index=0, key="d_a1")
+            with c_a2: p1b = st.selectbox("Tým A - Hráč 2", players_pick, index=0, key="d_a2")
+            
             c_b1, c_b2 = st.columns(2)
-            with c_b1:
-                p2a = st.selectbox("Tým B - Hráč 1", all_players, index=None, placeholder="— nevybráno —", key="d_b1")
-            with c_b2:
-                p2b = st.selectbox("Tým B - Hráč 2", all_players, index=None, placeholder="— nevybráno —", key="d_b2")
-
-            team_a = f"{p1a}+{p1b}" if None not in (p1a, p1b) else ""
-            team_b = f"{p2a}+{p2b}" if None not in (p2a, p2b) else ""
+            with c_b1: p2a = st.selectbox("Tým B - Hráč 1", players_pick, index=0, key="d_b1")
+            with c_b2: p2b = st.selectbox("Tým B - Hráč 2", players_pick, index=0, key="d_b2")
+            team_a, team_b = f"{p1a}+{p1b}", f"{p2a}+{p2b}"
             
     with col2:
         st.write("") # Odsazení
