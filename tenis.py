@@ -301,9 +301,8 @@ def build_player_history(df, target):
 def build_full_history(df: pd.DataFrame) -> pd.DataFrame:
     ratings = INITIAL_RATINGS.copy()
     
-    # --- TADY JE ZMĚNA ---
+    # 1. Příprava dat a indexů řádků
     tmp = df.copy()
-    # Přiřadíme reálné číslo řádku z Google Sheets (index 0 + header 1 + 1 = 2)
     tmp["sheet_row"] = tmp.index + 2 
     
     def parse_team(s: str):
@@ -315,12 +314,16 @@ def build_full_history(df: pd.DataFrame) -> pd.DataFrame:
         except:
             return None
 
-    # Teď teprve můžeme řadit - row_idx už zůstane přilepený k zápasu
+    # Pomocná funkce definovaná přímo zde, aby ji build_full_history viděla
+    def ensure_player(p: str):
+        ratings.setdefault(p, 1000.0)
+
+    # Řazení
     tmp["__dt"] = tmp["date"].apply(parse_date)
     tmp = tmp.sort_values("__dt", ascending=True).drop(columns=["__dt"])
-    # ---------------------
 
     out = []
+
     for _, r in tmp.iterrows():
         rtype = str(r.get("type", "")).strip()
         rawd = str(r.get("date", "")).strip()
@@ -329,11 +332,10 @@ def build_full_history(df: pd.DataFrame) -> pd.DataFrame:
         reason = str(r.get("reason", "")).strip()
         author = str(r.get("author", "")).strip()
 
-        # --- ADJUST (1 řádek) ---
+        # --- ADJUST ---
         if rtype == "adjust":
             p = str(r.get("team_a", "")).strip()
-            if not p:
-                continue
+            if not p: continue
 
             try:
                 delta = float(r.get("team_b", 0))
@@ -345,39 +347,26 @@ def build_full_history(df: pd.DataFrame) -> pd.DataFrame:
 
             is_add_player = reason.startswith("Přidání hráče")
             if is_add_player:
-                typ = "Přidání hráče"
-                zapas = f"{p} — Nastaveno na {int(round(ratings[p]))}"
-                duvod = reason
+                typ, zapas, duvod = "Přidání hráče", f"{p} — Nastaveno na {int(round(ratings[p]))}", reason
             else:
-                typ = "Úprava ELO"
-                zapas = f"{p} (Změna: {'+' if delta >= 0 else ''}{int(delta)})"
-                duvod = reason
+                typ, zapas, duvod = "Úprava ELO", f"{p} (Změna: {'+' if delta >= 0 else ''}{int(delta)})", reason
 
             out.append({
-                "Datum": rawd,
-                "Typ": typ,
-                "Zápas": zapas,
-                "Důvod": duvod,
-                "Výsledek": "",
-                "Skóre": "",
-                "Zapsal": author,
-                "row_idx": r["sheet_row"]
+                "Datum": rawd, "Typ": typ, "Zápas": zapas, "Důvod": duvod,
+                "Výsledek": "", "Skóre": "", "Zapsal": author, "row_idx": r["sheet_row"]
             })
             continue
 
-        # --- MATCH (1 řádek = 1 zápas z CSV) ---
+        # --- MATCH ---
         if rtype in ["singles", "doubles", "friendly_singles", "friendly_doubles"]:
             team_a = parse_team(r.get("team_a", ""))
             team_b = parse_team(r.get("team_b", ""))
-            if not team_a or not team_b:
-                continue
+            if not team_a or not team_b: continue
 
-            for p in team_a + team_b:
-                ensure_player(p)
+            for p in team_a + team_b: ensure_player(p)
 
             is_friendly = "friendly" in rtype
-            base_type = "Singles" if "singles" in rtype else "Doubles"
-            typ = "Přátelák" if is_friendly else base_type
+            typ = "Přátelák" if is_friendly else ("Singles" if "singles" in rtype else "Doubles")
 
             ra = sum(ratings[p] for p in team_a) / max(1, len(team_a))
             rb = sum(ratings[p] for p in team_b) / max(1, len(team_b))
@@ -386,40 +375,22 @@ def build_full_history(df: pd.DataFrame) -> pd.DataFrame:
 
             k = 0 if is_friendly else (K_SINGLES if "singles" in rtype else K_DOUBLES)
             delta = k * (sa - ea)
+            da, db = delta / max(1, len(team_a)), -delta / max(1, len(team_b))
 
-            da = delta / max(1, len(team_a))
-            db = -delta / max(1, len(team_b))
+            for p in team_a: ratings[p] += da
+            for p in team_b: ratings[p] += db
 
-            # apply změny
-            for p in team_a:
-                ratings[p] = ratings.get(p, 1000.0) + da
-            for p in team_b:
-                ratings[p] = ratings.get(p, 1000.0) + db
-
-            zapas = f"{' + '.join(team_a)} 🆚 {' + '.join(team_b)}"
-
-            if winner == "A":
-                vysledek = f"Vítěz: {' + '.join(team_a)}"
-            elif winner == "B":
-                vysledek = f"Vítěz: {' + '.join(team_b)}"
-            else:
-                vysledek = "Remíza"
+            vysledek = f"Vítěz: {' + '.join(team_a if winner == 'A' else team_b)}" if winner in ["A", "B"] else "Remíza"
 
             out.append({
-                "Datum": rawd,
-                "Typ": typ,
-                "Zápas": zapas,
-                "Důvod": "",
-                "Výsledek": vysledek,
-                "Skóre": score,
-                "Zapsal": author  # --- PŘIDÁNO ---
+                "Datum": rawd, "Typ": typ, "Zápas": f"{' + '.join(team_a)} 🆚 {' + '.join(team_b)}",
+                "Důvod": "", "Výsledek": vysledek, "Skóre": score, "Zapsal": author,
+                "row_idx": r["sheet_row"]  # <--- Tohle je klíčové pro smazání!
             })
-            continue
 
     if not out:
-        return pd.DataFrame(columns=["Datum", "Typ", "Zápas", "Důvod", "Výsledek", "Skóre", "Zapsal"])
+        return pd.DataFrame(columns=["Datum", "Typ", "Zápas", "Důvod", "Výsledek", "Skóre", "Zapsal", "row_idx"])
 
-    # od nejnovějšího
     return pd.DataFrame(out).iloc[::-1].reset_index(drop=True)
 
 def get_last_matches(df: pd.DataFrame, n: int = 5) -> pd.DataFrame:
