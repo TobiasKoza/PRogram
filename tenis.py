@@ -849,8 +849,6 @@ with tab_sd:
 # --- TAB 2: ZADÁNÍ ZÁPASU ---
 with tab2:
     all_players = sorted(compute_elo_with_meta()[0].keys())
-    PLACEHOLDER = "— nevybráno —"
-    players_pick = [PLACEHOLDER] + all_players
     col1, col2 = st.columns(2)
     
     with col1:
@@ -861,18 +859,25 @@ with tab2:
         
         # Výběr hráčů podle typu
         if "Singles" in m_type:
-            p1 = st.selectbox("Hráč A", players_pick, index=0, key="s1")
-            p2 = st.selectbox("Hráč B", players_pick, index=0, key="s2")
-            team_a, team_b = p1, p2
+            p1 = st.selectbox("Hráč A", all_players, index=None, placeholder="— nevybráno —", key="s1")
+            p2 = st.selectbox("Hráč B", all_players, index=None, placeholder="— nevybráno —", key="s2")
+            team_a = p1 if p1 is not None else ""
+            team_b = p2 if p2 is not None else ""
         else:
             c_a1, c_a2 = st.columns(2)
-            with c_a1: p1a = st.selectbox("Tým A - Hráč 1", players_pick, index=0, key="d_a1")
-            with c_a2: p1b = st.selectbox("Tým A - Hráč 2", players_pick, index=0, key="d_a2")
-            
+            with c_a1:
+                p1a = st.selectbox("Tým A - Hráč 1", all_players, index=None, placeholder="— nevybráno —", key="d_a1")
+            with c_a2:
+                p1b = st.selectbox("Tým A - Hráč 2", all_players, index=None, placeholder="— nevybráno —", key="d_a2")
+
             c_b1, c_b2 = st.columns(2)
-            with c_b1: p2a = st.selectbox("Tým B - Hráč 1", players_pick, index=0, key="d_b1")
-            with c_b2: p2b = st.selectbox("Tým B - Hráč 2", players_pick, index=0, key="d_b2")
-            team_a, team_b = f"{p1a}+{p1b}", f"{p2a}+{p2b}"
+            with c_b1:
+                p2a = st.selectbox("Tým B - Hráč 1", all_players, index=None, placeholder="— nevybráno —", key="d_b1")
+            with c_b2:
+                p2b = st.selectbox("Tým B - Hráč 2", all_players, index=None, placeholder="— nevybráno —", key="d_b2")
+
+            team_a = f"{p1a}+{p1b}" if None not in (p1a, p1b) else ""
+            team_b = f"{p2a}+{p2b}" if None not in (p2a, p2b) else ""
             
     with col2:
         st.write("") # Odsazení
