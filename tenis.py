@@ -733,33 +733,38 @@ with tab1:
         picked = st.selectbox(
             "Vyber hráče pro zobrazení historie:",
             options=all_players,
-            index=all_players.index(st.session_state.get("selected_player")) if st.session_state.get("selected_player") in all_players else 0,
+            index=None,  # Tímhle říkáme "nevybírej nikoho na začátku"
+            placeholder="— nevybráno —",
+            key="history_player_sel"
         )
 
-    st.session_state["selected_player"] = picked
-    st.subheader(f"Historie hráče: {picked}")
+    # Historii vykreslíme POUZE pokud je vybrán nějaký hráč
+    if picked:
+        st.subheader(f"Historie hráče: {picked}")
 
-    hist_df = build_player_history(df_all, picked)
+        hist_df = build_player_history(df_all, picked)
 
-    if hist_df.empty:
-        st.info("Bez zápasů.")
+        if hist_df.empty:
+            st.info("Bez zápasů.")
+        else:
+            def _res_color(v):
+                s = str(v).strip().lower()
+                if s == "výhra":
+                    return "color: #2ecc71; font-weight: 800;"
+                if s == "prohra":
+                    return "color: #e74c3c; font-weight: 800;"
+                return ""
+
+            hist_styler = (
+                hist_df.style
+                    .hide(axis="index")
+                    .applymap(_res_color, subset=["Výsledek"])
+            )
+
+            html_hist = hist_styler.to_html()
+            st.markdown(f'<div class="hist-wrap">{html_hist}</div>', unsafe_allow_html=True)
     else:
-        def _res_color(v):
-            s = str(v).strip().lower()
-            if s == "výhra":
-                return "color: #2ecc71; font-weight: 800;"
-            if s == "prohra":
-                return "color: #e74c3c; font-weight: 800;"
-            return ""
-
-        hist_styler = (
-            hist_df.style
-                .hide(axis="index")
-                .applymap(_res_color, subset=["Výsledek"])
-        )
-
-        html_hist = hist_styler.to_html()
-        st.markdown(f'<div class="hist-wrap">{html_hist}</div>', unsafe_allow_html=True)
+        st.info("Vyber hráče ze seznamu nahoře pro zobrazení jeho osobní historie.")
 
 # --- TAB 1.5: SINGLES A DOUBLES ---
 with tab_sd:
