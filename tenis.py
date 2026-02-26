@@ -513,26 +513,6 @@ with tab1:
             use_container_width=True,
             hide_index=True
         )
-        right_n = len(players_out)
-
-        match_types = ["singles", "doubles", "friendly_singles", "friendly_doubles"]
-        available_matches = int(df_all["type"].isin(match_types).sum())
-        shown_n = min(right_n, available_matches)
-
-        lastN_df = get_last_matches(df_all, n=right_n)
-
-        if len(lastN_df) < right_n:
-            pad = pd.DataFrame([{"Datum": "", "Typ": "", "Zápas": "", "Vítěz": "", "Skóre": ""}] * (right_n - len(lastN_df)))
-            lastN_df = pd.concat([lastN_df, pad], ignore_index=True)
-
-        st.markdown(f'<div class="section-bar">Posledních {shown_n} zápasů</div>', unsafe_allow_html=True)
-        st.dataframe(
-            lastN_df.style
-                .set_properties(**{'text-align': 'center'})
-                .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]),
-            use_container_width=True,
-            hide_index=True
-        )
 
     df_all = load_data()
     all_players = sorted(list(set(list(ratings.keys()))))
