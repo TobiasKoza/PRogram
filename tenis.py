@@ -403,21 +403,29 @@ with tab1:
     active_out = active_ranked_df.drop(columns=["__ranked", "__elo_num", "__ld"])
 
     df_all = load_data()
-    last5_df = get_last_matches(df_all, n=5)
+    # pravá tabulka má mít stejný počet řádků jako levá
+    # (počítáme až po sestavení players_out níž, tady jen připravíme df_all)
+    df_all = load_data()
 
     # --- SPODNÍ TABULKA = inactive ranked + unranked (dáme do jedné tabulky s hlavní) ---
     inactive_ranked_df = inactive_ranked_df.sort_values("__elo_num", ascending=False).reset_index(drop=True)
     inactive_ranked_df.insert(0, "#", ["inactive"] * len(inactive_ranked_df))
     inactive_ranked_out = inactive_ranked_df.drop(columns=["__ranked", "__elo_num", "__ld"])
+    # inactive je jen "stav" v tabulce -> ELO v tabulce zobraz 0(0)
+    inactive_ranked_out["ELO"] = "0(0)"
 
     unranked_df = unranked_df.sort_values("__elo_num", ascending=False).reset_index(drop=True)
     unranked_df.insert(0, "#", ["unranked"] * len(unranked_df))
     unranked_df["ELO"] = "0(0)"
     unranked_out = unranked_df.drop(columns=["__ranked", "__elo_num"])
 
-    # separator řádek (šedý pruh uvnitř tabulky)
-    sep = {c: "" for c in active_out.columns}
+    # separator řádek (vizuálně "sloučený" – ostatní buňky zneviditelníme stylem)
+    sep = {c: " " for c in active_out.columns}
+    sep["#"] = " "
     sep["Hráč"] = "Hráči bez zápasu za posledních 30 dní"
+    sep["ELO"] = " "
+    sep["Poslední zápas"] = " "
+    sep["ELO změna celkem (poslední zápas)"] = " "
     sep_row = pd.DataFrame([sep])
 
     players_out = pd.concat([active_out, sep_row, inactive_ranked_out, unranked_out], ignore_index=True)
@@ -426,31 +434,53 @@ with tab1:
 
     def _delta_color(v):
         s = str(v).strip()
-        if (not s) or ("Hráči bez zápasu" in s) or (s == "0(0)"):
-            return "color: rgba(255,255,255,0.55);"
+        if not s:
+            return ""
         try:
-            main = s.split("(", 1)[0].strip()  # "+22" nebo "-9"
-            n = int(main)
-            if n > 0:
-                return "color: #2ecc71; font-weight: 700;"
-            if n < 0:
-                return "color: #e74c3c; font-weight: 700;"
-            return "color: rgba(255,255,255,0.75);"
+            main = s.split("(", 1)[0].strip()
+            n = float(main.replace("+", "").replace("−", "-"))
         except:
-            return "color: rgba(255,255,255,0.75);"
+            return ""
+        if n > 0:
+            return "color: #2ecc71; font-weight: 700;"
+        if n < 0:
+            return "color: #e74c3c; font-weight: 700;"
+        return ""
 
     def _row_style(row):
-        if str(row.get("Hráč", "")) == "Hráči bez zápasu za posledních 30 dní":
+        # separator řádek (uvnitř tabulky)
+        if str(row.get("Hráč", "")).strip() == "Hráči bez zápasu za posledních 30 dní":
             return [
-                "background-color: rgba(255,255,255,0.08);"
+                "background-color: rgba(255,255,255,0.09);"
                 "color: rgba(255,255,255,0.55);"
-                "font-weight: 700;"
+                "font-weight: 800;"
             ] * len(row)
+
+        # inactive + unranked řádky (zašedlé)
+        if str(row.get("#", "")).strip() in ["inactive", "unranked"]:
+            return [
+                "color: rgba(255,255,255,0.55);"
+                "background-color: rgba(255,255,255,0.03);"
+            ] * len(row)
+
+        return [""] * len(row)
+
+    # sloučený efekt separatoru: všechny buňky kromě "Hráč" v tom řádku zneviditelníme
+    def _sep_hide_cells(row):
+        if str(row.get("Hráč", "")).strip() == "Hráči bez zápasu za posledních 30 dní":
+            out = []
+            for col in players_out.columns:
+                if col == "Hráč":
+                    out.append("text-align: center;")
+                else:
+                    out.append("color: rgba(255,255,255,0.0);")
+            return out
         return [""] * len(row)
 
     players_styler = (
         players_out.style
             .apply(_row_style, axis=1)
+            .apply(_sep_hide_cells, axis=1)
             .applymap(_delta_color, subset=[DELTA_COL])
             .set_properties(**{'text-align': 'center'})
             .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}])
@@ -463,9 +493,41 @@ with tab1:
         st.dataframe(players_styler, use_container_width=True, hide_index=True)
 
     with right:
-        st.markdown('<div class="section-bar">Posledních 5 zápasů</div>', unsafe_allow_html=True)
+        right_n = len(players_out)
+
+        match_types = ["singles", "doubles", "friendly_singles", "friendly_doubles"]
+        available_matches = int(df_all["type"].isin(match_types).sum())
+        shown_n = min(right_n, available_matches)
+
+        lastN_df = get_last_matches(df_all, n=right_n)
+
+        if len(lastN_df) < right_n:
+            pad = pd.DataFrame([{"Datum": "", "Typ": "", "Zápas": "", "Vítěz": "", "Skóre": ""}] * (right_n - len(lastN_df)))
+            lastN_df = pd.concat([lastN_df, pad], ignore_index=True)
+
+        st.markdown(f'<div class="section-bar">Posledních {shown_n} zápasů</div>', unsafe_allow_html=True)
         st.dataframe(
-            last5_df.style
+            lastN_df.style
+                .set_properties(**{'text-align': 'center'})
+                .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]),
+            use_container_width=True,
+            hide_index=True
+        )with right:
+        right_n = len(players_out)
+
+        match_types = ["singles", "doubles", "friendly_singles", "friendly_doubles"]
+        available_matches = int(df_all["type"].isin(match_types).sum())
+        shown_n = min(right_n, available_matches)
+
+        lastN_df = get_last_matches(df_all, n=right_n)
+
+        if len(lastN_df) < right_n:
+            pad = pd.DataFrame([{"Datum": "", "Typ": "", "Zápas": "", "Vítěz": "", "Skóre": ""}] * (right_n - len(lastN_df)))
+            lastN_df = pd.concat([lastN_df, pad], ignore_index=True)
+
+        st.markdown(f'<div class="section-bar">Posledních {shown_n} zápasů</div>', unsafe_allow_html=True)
+        st.dataframe(
+            lastN_df.style
                 .set_properties(**{'text-align': 'center'})
                 .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]),
             use_container_width=True,
