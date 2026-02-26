@@ -204,6 +204,7 @@ def build_player_history(df, target):
         score = str(r.get("score", "")).strip()
         sets_raw = str(r.get("sets", "")).strip()
         reason = str(r.get("reason", "")).strip()
+        author = str(r.get("author", "")).strip()
         
         # 1. Manuální úpravy
         if rtype == "adjust":
@@ -1067,18 +1068,18 @@ with tab2:
             date = st.date_input("Datum", key="match_date")
             
             if "Singles" in m_type:
-                p1 = st.selectbox("Hráč A", all_players, placeholder="— nevybráno —", key="s1")
-                p2 = st.selectbox("Hráč B", all_players, placeholder="— nevybráno —", key="s2")
+                p1 = st.selectbox("Hráč A", all_players, index=None, placeholder="— nevybráno —", key="s1")
+                p2 = st.selectbox("Hráč B", all_players, index=None, placeholder="— nevybráno —", key="s2")
                 team_a = p1 if p1 is not None else ""
                 team_b = p2 if p2 is not None else ""
             else:
                 c_a1, c_a2 = st.columns(2)
-                with c_a1: p1a = st.selectbox("Tým A - Hráč 1", all_players, placeholder="— nevybráno —", key="d_a1")
-                with c_a2: p1b = st.selectbox("Tým A - Hráč 2", all_players, placeholder="— nevybráno —", key="d_a2")
+                with c_a1: p1a = st.selectbox("Tým A - Hráč 1", all_players, index=None, placeholder="— nevybráno —", key="d_a1")
+                with c_a2: p1b = st.selectbox("Tým A - Hráč 2", all_players, index=None, placeholder="— nevybráno —", key="d_a2")
                 
                 c_b1, c_b2 = st.columns(2)
                 with c_b1: p2a = st.selectbox("Tým B - Hráč 1", all_players, placeholder="— nevybráno —", key="d_b1")
-                with c_b2: p2b = st.selectbox("Tým B - Hráč 2", all_players, placeholder="— nevybráno —", key="d_b2")
+                with c_b2: p2b = st.selectbox("Tým B - Hráč 2", all_players, index=None, placeholder="— nevybráno —", key="d_b2")
                 team_a = f"{p1a}+{p1b}" if (p1a and p1b) else ""
                 team_b = f"{p2a}+{p2b}" if (p2a and p2b) else ""
                 
@@ -1118,7 +1119,7 @@ with tab2:
                     "score": score,
                     "sets": sets,
                     "reason": "",
-                    "author": st.session_state["username"]  # PŘIDAT TENTO ŘÁDEK
+                    "author": st.session_state.get("name", "Neznámý")  # PŘIDAT TENTO ŘÁDEK
                 })
 
                 st.session_state["_match_saved"] = True
@@ -1145,7 +1146,7 @@ with tab2:
                         "team_a": adj_player,
                         "team_b": adj_delta,
                         "reason": adj_reason,
-                        "author": st.session_state["username"]  # PŘIDAT TENTO ŘÁDEK
+                        "author": st.session_state.get("name", "Neznámý")
                     })
                     st.session_state["_elo_adjusted"] = True
                     st.session_state["_clear_adj"] = True
