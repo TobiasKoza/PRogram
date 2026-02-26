@@ -1012,24 +1012,37 @@ with tab2:
     
     with col1:
         bar("Nový zápas")
-        m_type = st.radio("Typ zápasu", ["Singles", "Doubles"], index=0, key="m_type")
+        # INICIALIZACE VÝCHOZÍCH HODNOT (aby Streamlit nepanikařil)
+        if "match_date" not in st.session_state:
+            st.session_state["m_type"] = "Singles"
+            st.session_state["is_friendly"] = False
+            st.session_state["match_date"] = datetime.now().date()
+            st.session_state["s1"] = None
+            st.session_state["s2"] = None
+            st.session_state["d_a1"] = None
+            st.session_state["d_a2"] = None
+            st.session_state["d_b1"] = None
+            st.session_state["d_b2"] = None
+            st.session_state["winner_sel"] = "A"
+
+        m_type = st.radio("Typ zápasu", ["Singles", "Doubles"], key="m_type")
         is_friendly = st.checkbox("Přátelák (nezapočítává se do ELO)", key="is_friendly")
-        date = st.date_input("Datum", datetime.now().date(), key="match_date")
+        date = st.date_input("Datum", key="match_date")
         
         # Výběr hráčů podle typu
         if "Singles" in m_type:
-            p1 = st.selectbox("Hráč A", all_players, index=None, placeholder="— nevybráno —", key="s1")
-            p2 = st.selectbox("Hráč B", all_players, index=None, placeholder="— nevybráno —", key="s2")
+            p1 = st.selectbox("Hráč A", all_players, placeholder="— nevybráno —", key="s1")
+            p2 = st.selectbox("Hráč B", all_players, placeholder="— nevybráno —", key="s2")
             team_a = p1 if p1 is not None else ""
             team_b = p2 if p2 is not None else ""
         else:
             c_a1, c_a2 = st.columns(2)
-            with c_a1: p1a = st.selectbox("Tým A - Hráč 1", all_players, index=None, placeholder="— nevybráno —", key="d_a1")
-            with c_a2: p1b = st.selectbox("Tým A - Hráč 2", all_players, index=None, placeholder="— nevybráno —", key="d_a2")
+            with c_a1: p1a = st.selectbox("Tým A - Hráč 1", all_players, placeholder="— nevybráno —", key="d_a1")
+            with c_a2: p1b = st.selectbox("Tým A - Hráč 2", all_players, placeholder="— nevybráno —", key="d_a2")
             
             c_b1, c_b2 = st.columns(2)
-            with c_b1: p2a = st.selectbox("Tým B - Hráč 1", all_players, index=None, placeholder="— nevybráno —", key="d_b1")
-            with c_b2: p2b = st.selectbox("Tým B - Hráč 2", all_players, index=None, placeholder="— nevybráno —", key="d_b2")
+            with c_b1: p2a = st.selectbox("Tým B - Hráč 1", all_players, placeholder="— nevybráno —", key="d_b1")
+            with c_b2: p2b = st.selectbox("Tým B - Hráč 2", all_players, placeholder="— nevybráno —", key="d_b2")
             team_a = f"{p1a}+{p1b}" if (p1a and p1b) else ""
             team_b = f"{p2a}+{p2b}" if (p2a and p2b) else ""
             
@@ -1037,7 +1050,7 @@ with tab2:
         st.write("") # Odsazení
         st.write("")
         # V selectboxu se zobrazí konkrétní jména, ale do kódu se uloží jen "A" nebo "B"
-        winner = st.selectbox("Vítěz", ["A", "B"], index=0, format_func=lambda x: team_a if x == "A" else team_b, key="winner_sel")
+        winner = st.selectbox("Vítěz", ["A", "B"], format_func=lambda x: team_a if x == "A" else team_b, key="winner_sel")
         score = st.text_input("Skóre (např. 2:1)", "", key="score_in")
         sets = st.text_input("Gemy setů (např. 6,4,6)", "", key="sets_in")
         
