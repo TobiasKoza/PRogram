@@ -325,7 +325,7 @@ def bar(text: str):
     st.markdown(f'<div class="section-bar">{text}</div>', unsafe_allow_html=True)
 
 # Záložky pro přepínání obsahu
-tab1, tab_sd, tab2, tab3 = st.tabs(["🏆 Žebříček", "🎾 Singles & Doubles", "✍️ Zadat zápas", "📜 Historie"])
+tab1, tab_sd, tab2, tab3 = st.tabs(["🏆 Žebříček", "🎾 Singles & Doubles", "✍️ Zadat zápas nebo přidat hráče", "📜 Kompletní historie"])
 
 # načti sheet JEDNOU pro celý run (tabs se i tak vykonají všechny)
 DF_ALL = load_data()
@@ -515,20 +515,77 @@ with tab1:
             return out
         return [""] * len(row)
 
-    players_styler = (
-        players_out.style
-            .hide(axis="index")
-            .apply(_row_style, axis=1)
-            .apply(_sep_hide_cells, axis=1)
-            .applymap(_delta_color, subset=[DELTA_COL])
-    )
+    # --- místo pandas styleru vykresli HTML, a separator udělej colspan přes všechny sloupce ---
+    cols = list(players_out.columns)
+    ncols = len(cols)
+
+    def _esc(x):
+        return str(x).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    parts = []
+    parts.append('<div class="hist-wrap"><table class="hist-table">')
+
+    # header
+    parts.append("<thead><tr>")
+    for c in cols:
+        parts.append(f"<th>{_esc(c)}</th>")
+    parts.append("</tr></thead>")
+
+    # body
+    parts.append("<tbody>")
+    for _, row in players_out.iterrows():
+        is_sep = str(row.get("Hráč", "")).strip() == "Hráči bez zápasu za posledních 30 dní"
+        is_unranked = str(row.get("#", "")).strip() == "unranked"
+
+        if is_sep:
+            parts.append(
+                f'<tr>'
+                f'<td colspan="{ncols}" style="background-color: rgba(255,255,255,0.09); color: rgba(255,255,255,0.55); font-weight: 800; text-align: center;">'
+                f'Hráči bez zápasu za posledních 30 dní'
+                f'</td>'
+                f'</tr>'
+            )
+            continue
+
+        parts.append("<tr>")
+        for c in cols:
+            v = row.get(c, "")
+
+            # barvení Δ sloupce
+            if c == DELTA_COL:
+                s = str(v).strip()
+                style = ""
+                try:
+                    main = s.split("(", 1)[0].strip()
+                    n = float(main.replace("+", "").replace("−", "-"))
+                    if n > 0:
+                        style = "color: #2ecc71; font-weight: 700;"
+                    elif n < 0:
+                        style = "color: #e74c3c; font-weight: 700;"
+                except:
+                    style = ""
+
+                # unranked = šedé pozadí
+                row_style = 'color: rgba(255,255,255,0.55); background-color: rgba(255,255,255,0.03);' if is_unranked else ""
+                parts.append(f'<td style="{row_style}{style}">{_esc(v)}</td>')
+                continue
+
+            # unranked = šedé pozadí (všechny sloupce)
+            if is_unranked:
+                parts.append(f'<td style="color: rgba(255,255,255,0.55); background-color: rgba(255,255,255,0.03);">{_esc(v)}</td>')
+            else:
+                parts.append(f"<td>{_esc(v)}</td>")
+
+        parts.append("</tr>")
+    parts.append("</tbody></table></div>")
+
+    html_left = "".join(parts)
 
     left, right = st.columns([3, 2], gap="large")
 
     with left:
         st.markdown('<div class="section-bar">Aktuální žebříček ELO</div>', unsafe_allow_html=True)
-        html_left = players_styler.to_html()
-        st.markdown(f'<div class="hist-wrap">{html_left}</div>', unsafe_allow_html=True)
+        st.markdown(html_left, unsafe_allow_html=True)
 
     with right:
         right_n = len(players_out)
