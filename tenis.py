@@ -74,7 +74,7 @@ def save_match(row):
     full = {c: "" for c in COLUMNS}
     full.update(row)
 
-    ws.append_row([full[c] for c in COLUMNS], value_input_option="USER_ENTERED")
+    ws.append_row([full[c] for c in COLUMNS], value_input_option="RAW")
 
     load_data.clear()
 
@@ -1117,7 +1117,7 @@ with tab2:
                     "team_b": team_b,
                     "winner": winner,
                     "score": score,
-                    "sets": sets,
+                    "sets": f"'{sets}",
                     "reason": "",
                     "author": st.session_state.get("name", "Neznámý")  # PŘIDAT TENTO ŘÁDEK
                 })
