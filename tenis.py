@@ -369,7 +369,7 @@ with tab1:
             "__elo_num": int(round(float(elo))),  # pro řazení ranked
             "ELO": int(round(float(elo))),        # dočasně, u unranked přepíšeme
             "Poslední zápas": ld_str,
-            "ΔELO (Δ )": f"{td:+.0f} ({ldel:+.0f})",
+            "Δ ELO (posl.)": f"{td:+.0f} ({ldel:+.0f})",
         })
 
     rank_df = pd.DataFrame(rows)
@@ -404,20 +404,20 @@ with tab1:
 
     df_all = load_data()
     # pravá tabulka má mít stejný počet řádků jako levá
-    # (počítáme až po sestavení players_out níž, tady jen připravíme df_all)
-    df_all = load_data()
 
-    # --- SPODNÍ TABULKA = (inactive ranked) + (unranked) -> vše označit jen jako "unranked" ---
+    # --- SPODNÍ TABULKA = inactive ranked + unranked (dáme do jedné tabulky s hlavní) ---
     inactive_ranked_df = inactive_ranked_df.sort_values("__elo_num", ascending=False).reset_index(drop=True)
     inactive_ranked_df.insert(0, "#", ["unranked"] * len(inactive_ranked_df))
     inactive_ranked_out = inactive_ranked_df.drop(columns=["__ranked", "__elo_num", "__ld"])
-    # unranked blok: ELO se NESMÍ přepisovat (jen vizuálně), změna má být 0 (0)
-    inactive_ranked_out["ELO změna celkem (poslední zápas)"] = "0 (0)"
+    
+    inactive_ranked_out["ELO"] = "0"
+    inactive_ranked_out["Δ ELO (posl.)"] = "0 (0)"
 
     unranked_df = unranked_df.sort_values("__elo_num", ascending=False).reset_index(drop=True)
     unranked_df.insert(0, "#", ["unranked"] * len(unranked_df))
-    unranked_df["ELO změna celkem (poslední zápas)"] = "0 (0)"
     unranked_out = unranked_df.drop(columns=["__ranked", "__elo_num"])
+    unranked_out["ELO"] = "0"
+    unranked_out["Δ ELO (posl.)"] = "0 (0)"
 
     # separator řádek (vizuálně "sloučený" – ostatní buňky zneviditelníme stylem)
     sep = {c: " " for c in active_out.columns}
@@ -425,20 +425,12 @@ with tab1:
     sep["Hráč"] = "Hráči bez zápasu za posledních 30 dní"
     sep["ELO"] = " "
     sep["Poslední zápas"] = " "
-    sep["ELO změna celkem (poslední zápas)"] = " "
+    sep["Δ ELO (posl.)"] = " "
     sep_row = pd.DataFrame([sep])
 
     players_out = pd.concat([active_out, sep_row, inactive_ranked_out, unranked_out], ignore_index=True)
 
-    # kratší nadpis sloupce (kvůli šířce)
-    DELTA_COL_OLD = "ELO změna celkem (poslední zápas)"
-    DELTA_COL = "ΔELO"
-    players_out = players_out.rename(columns={DELTA_COL_OLD: DELTA_COL})
-
-    # vizuální ELO pro unranked: zobrazit 0(0), ale reálné ELO ponechat (vypočtené)
-    players_out_display = players_out.copy()
-    unrank_mask = players_out_display["#"].astype(str).str.strip().eq("unranked")
-    players_out_display.loc[unrank_mask, "ELO"] = "0(0)"
+    DELTA_COL = "Δ ELO (posl.)"
 
     def _delta_color(v):
         s = str(v).strip()
@@ -465,7 +457,7 @@ with tab1:
             ] * len(row)
 
         # inactive + unranked řádky (zašedlé)
-        if str(row.get("#", "")).strip() == "unranked":
+        if str(row.get("#", "")).strip() in ["inactive", "unranked"]:
             return [
                 "color: rgba(255,255,255,0.55);"
                 "background-color: rgba(255,255,255,0.03);"
@@ -486,7 +478,7 @@ with tab1:
         return [""] * len(row)
 
     players_styler = (
-        players_out_display.style
+        players_out.style
             .apply(_row_style, axis=1)
             .apply(_sep_hide_cells, axis=1)
             .applymap(_delta_color, subset=[DELTA_COL])
