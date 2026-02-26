@@ -328,12 +328,10 @@ def build_full_history(df: pd.DataFrame) -> pd.DataFrame:
             if is_add_player:
                 typ = "Přidání hráče"
                 zapas = f"{p} — Nastaveno na {int(round(ratings[p]))}"
-                rozdil = ""
                 duvod = reason
             else:
                 typ = "Úprava ELO"
-                zapas = f"{p}"
-                rozdil = f"{'+' if delta >= 0 else ''}{int(delta)}"
+                zapas = f"{p} (Změna: {'+' if delta >= 0 else ''}{int(delta)})"
                 duvod = reason
 
             out.append({
@@ -342,9 +340,7 @@ def build_full_history(df: pd.DataFrame) -> pd.DataFrame:
                 "Zápas": zapas,
                 "Důvod": duvod,
                 "Výsledek": "",
-                "Skóre": "",
-                "Rozdíl ELO": rozdil,
-                "ELO po": f"{round(ratings[p], 2):.2f}",
+                "Skóre": ""
             })
             continue
 
@@ -383,20 +379,11 @@ def build_full_history(df: pd.DataFrame) -> pd.DataFrame:
 
             # Výsledek beru z pohledu team_a
             if winner == "A":
-                vysledek = "Výhra"
+                vysledek = "Výhra Týmu A"
             elif winner == "B":
-                vysledek = "Prohra"
+                vysledek = "Výhra Týmu B"
             else:
                 vysledek = ""
-
-            if is_friendly:
-                rozdil = ""
-                elo_po = ""
-            else:
-                d_int = int(round(da))
-                rozdil = f"+{d_int}" if d_int > 0 else str(d_int)
-                elo_a_avg = sum(ratings[p] for p in team_a) / max(1, len(team_a))
-                elo_po = f"{round(elo_a_avg, 2):.2f}"
 
             out.append({
                 "Datum": rawd,
@@ -404,14 +391,12 @@ def build_full_history(df: pd.DataFrame) -> pd.DataFrame:
                 "Zápas": zapas,
                 "Důvod": "",
                 "Výsledek": vysledek,
-                "Skóre": score,
-                "Rozdíl ELO": rozdil,
-                "ELO po": elo_po,
+                "Skóre": score
             })
             continue
 
     if not out:
-        return pd.DataFrame(columns=["Datum", "Typ", "Zápas", "Důvod", "Výsledek", "Skóre", "Rozdíl ELO", "ELO po"])
+        return pd.DataFrame(columns=["Datum", "Typ", "Zápas", "Důvod", "Výsledek", "Skóre"])
 
     # od nejnovějšího
     return pd.DataFrame(out).iloc[::-1].reset_index(drop=True)
@@ -1028,10 +1013,13 @@ with tab2:
 
 
     all_players = sorted(compute_elo_with_meta()[0].keys())
+    
+    # Šedý obdélník dáme sem nahoru PŘED sloupce, aby byl přes celou šířku
+    bar("Přidat nový zápas")
+    
     col1, col2 = st.columns(2)
     
     with col1:
-        bar("Nový zápas")
         # INICIALIZACE VÝCHOZÍCH HODNOT (aby Streamlit nepanikařil)
         if "match_date" not in st.session_state:
             st.session_state["m_type"] = "Singles"
@@ -1176,7 +1164,7 @@ with tab2:
             elif new_name in all_players:
                 st.error("Tento hráč už existuje.")
 
-                
+
 # --- TAB 3: HISTORIE ---
 
 with tab3:
