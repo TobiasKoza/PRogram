@@ -623,7 +623,21 @@ with tab1:
     if hist_df.empty:
         st.info("Bez zápasů.")
     else:
-        html_hist = hist_df.to_html(index=False, border=0, escape=True)
+        def _res_color(v):
+            s = str(v).strip().lower()
+            if s == "výhra":
+                return "color: #2ecc71; font-weight: 800;"
+            if s == "prohra":
+                return "color: #e74c3c; font-weight: 800;"
+            return ""
+
+        hist_styler = (
+            hist_df.style
+                .hide(axis="index")
+                .applymap(_res_color, subset=["Výsledek"])
+        )
+
+        html_hist = hist_styler.to_html()
         st.markdown(f'<div class="hist-wrap">{html_hist}</div>', unsafe_allow_html=True)
 
 # --- TAB 1.5: SINGLES A DOUBLES ---
@@ -835,6 +849,8 @@ with tab_sd:
 # --- TAB 2: ZADÁNÍ ZÁPASU ---
 with tab2:
     all_players = sorted(compute_elo_with_meta()[0].keys())
+    PLACEHOLDER = "— nevybráno —"
+    players_pick = [PLACEHOLDER] + all_players
     col1, col2 = st.columns(2)
     
     with col1:
@@ -845,17 +861,17 @@ with tab2:
         
         # Výběr hráčů podle typu
         if "Singles" in m_type:
-            p1 = st.selectbox("Hráč A", all_players, key="s1")
-            p2 = st.selectbox("Hráč B", all_players, key="s2")
+            p1 = st.selectbox("Hráč A", players_pick, index=0, key="s1")
+            p2 = st.selectbox("Hráč B", players_pick, index=0, key="s2")
             team_a, team_b = p1, p2
         else:
             c_a1, c_a2 = st.columns(2)
-            with c_a1: p1a = st.selectbox("Tým A - Hráč 1", all_players)
-            with c_a2: p1b = st.selectbox("Tým A - Hráč 2", all_players)
+            with c_a1: p1a = st.selectbox("Tým A - Hráč 1", players_pick, index=0, key="d_a1")
+            with c_a2: p1b = st.selectbox("Tým A - Hráč 2", players_pick, index=0, key="d_a2")
             
             c_b1, c_b2 = st.columns(2)
-            with c_b1: p2a = st.selectbox("Tým B - Hráč 1", all_players)
-            with c_b2: p2b = st.selectbox("Tým B - Hráč 2", all_players)
+            with c_b1: p2a = st.selectbox("Tým B - Hráč 1", players_pick, index=0, key="d_b1")
+            with c_b2: p2b = st.selectbox("Tým B - Hráč 2", players_pick, index=0, key="d_b2")
             team_a, team_b = f"{p1a}+{p1b}", f"{p2a}+{p2b}"
             
     with col2:
