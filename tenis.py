@@ -383,11 +383,11 @@ def build_full_history(df: pd.DataFrame) -> pd.DataFrame:
             zapas = f"{' + '.join(team_a)} 🆚 {' + '.join(team_b)}"
 
             if winner == "A":
-                vysledek = "Výhra Týmu A"
+                vysledek = f"Vítěz: {' + '.join(team_a)}"
             elif winner == "B":
-                vysledek = "Výhra Týmu B"
+                vysledek = f"Vítěz: {' + '.join(team_b)}"
             else:
-                vysledek = ""
+                vysledek = "Remíza"
 
             out.append({
                 "Datum": rawd,
