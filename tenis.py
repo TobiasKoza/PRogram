@@ -451,8 +451,11 @@ st.set_page_config(page_title="Tennis ELO Žebříček", page_icon="🎾", layou
 st.title("🎾 Tennis ELO — Zápisy a Žebříček")
 
 # --- PŘIHLAŠOVÁNÍ (Levý panel) ---
+# Tato úprava zajistí, že si knihovna může do dat zapisovat (resetovat pokusy atd.)
+credentials = st.secrets["credentials"].to_dict()
+
 authenticator = stauth.Authenticate(
-    dict(st.secrets["credentials"]),
+    credentials,
     st.secrets["cookie"]["name"],
     st.secrets["cookie"]["key"],
     st.secrets["cookie"]["expiry_days"]
