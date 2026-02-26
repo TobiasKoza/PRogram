@@ -277,6 +277,131 @@ def build_player_history(df, target):
         
     return pd.DataFrame(hist).iloc[::-1]
 
+def build_full_history(df: pd.DataFrame) -> pd.DataFrame:
+    ratings = INITIAL_RATINGS.copy()
+
+    def parse_team(s: str):
+        return [x.strip() for x in str(s).split("+") if x.strip()]
+
+    def parse_date(s: str):
+        try:
+            return datetime.strptime(str(s).strip(), "%d.%m.%Y").date()
+        except:
+            return None
+
+    def ensure_player(p: str):
+        ratings.setdefault(p, 1000.0)
+
+    # seřadit chronologicky, aby ELO po dávalo smysl
+    tmp = df.copy()
+    tmp["__dt"] = tmp["date"].apply(parse_date)
+    tmp = tmp.sort_values("__dt", ascending=True).drop(columns=["__dt"])
+
+    out = []
+
+    for _, r in tmp.iterrows():
+        rtype = str(r.get("type", "")).strip()
+        rawd = str(r.get("date", "")).strip()
+        winner = str(r.get("winner", "")).strip()
+        score = str(r.get("score", "")).strip()
+        sets_raw = str(r.get("sets", "")).strip()
+        reason = str(r.get("reason", "")).strip()
+
+        # 1) Manuální úpravy
+        if rtype == "adjust":
+            p = str(r.get("team_a", "")).strip()
+            try:
+                delta = float(r.get("team_b", 0))
+            except:
+                delta = 0.0
+
+            if not p:
+                continue
+
+            ensure_player(p)
+            ratings[p] = ratings.get(p, 1000.0) + delta
+
+            is_add_player = reason.startswith("Přidání hráče")
+            if is_add_player:
+                match_txt = f"{p} — Nastaveno na {int(round(ratings[p]))}"
+                elo_diff = ""
+                typ = "Přidání hráče"
+            else:
+                match_txt = f"{p} — Manuální úprava — {reason}".strip(" —")
+                elo_diff = f"{'+' if delta >= 0 else ''}{int(delta)}"
+                typ = "Úprava ELO"
+
+            out.append({
+                "Datum": rawd,
+                "Typ": typ,
+                "Zápas": match_txt,
+                "Výsledek": "",
+                "Skóre": "",
+                "Sety": "",
+                "Rozdíl ELO": elo_diff,
+                "ELO po": round(ratings[p], 2),
+            })
+            continue
+
+        # 2) Zápasy (ranked + friendly)
+        if rtype in ["singles", "doubles", "friendly_singles", "friendly_doubles"]:
+            team_a = parse_team(r.get("team_a", ""))
+            team_b = parse_team(r.get("team_b", ""))
+            if not team_a or not team_b:
+                continue
+
+            for p in team_a + team_b:
+                ensure_player(p)
+
+            is_friendly = "friendly" in rtype
+            base_type = "Singles" if "singles" in rtype else "Doubles"
+
+            ra = sum(ratings[p] for p in team_a) / max(1, len(team_a))
+            rb = sum(ratings[p] for p in team_b) / max(1, len(team_b))
+            ea = 1.0 / (1.0 + 10 ** ((rb - ra) / SCALE))
+            sa = 1.0 if winner == "A" else 0.0
+
+            k = 0 if is_friendly else (K_SINGLES if "singles" in rtype else K_DOUBLES)
+            delta_a = k * (sa - ea)
+            delta_b = -delta_a
+
+            per_player_delta = {}
+            for p in team_a:
+                per_player_delta[p] = delta_a / max(1, len(team_a))
+            for p in team_b:
+                per_player_delta[p] = delta_b / max(1, len(team_b))
+
+            # upd ELO
+            for p, d in per_player_delta.items():
+                ratings[p] = ratings.get(p, 1000.0) + d
+
+            match_txt_base = f"{' + '.join(team_a)} 🆚 {' + '.join(team_b)}"
+
+            # výstupní řádky pro všechny hráče v zápase
+            for p in team_a + team_b:
+                d_pl = per_player_delta.get(p, 0.0)
+
+                res = "Výhra" if (
+                    (winner == "A" and p in team_a) or (winner == "B" and p in team_b)
+                ) else "Prohra"
+
+                out.append({
+                    "Datum": rawd,
+                    "Typ": "Přátelák" if is_friendly else base_type,
+                    "Zápas": f"{p} — {match_txt_base}",
+                    "Výsledek": res,
+                    "Skóre": score,
+                    "Sety": sets_raw,
+                    "Rozdíl ELO": "" if is_friendly else f"{'+' if round(d_pl) >= 0 else ''}{int(round(d_pl))}",
+                    "ELO po": round(ratings[p], 2),
+                })
+
+    if not out:
+        return pd.DataFrame(columns=["Datum", "Typ", "Zápas", "Výsledek", "Skóre", "Sety", "Rozdíl ELO", "ELO po"])
+
+    # zobrazit od nejnovějšího
+    return pd.DataFrame(out).iloc[::-1].reset_index(drop=True)
+
 
 def get_last_matches(df: pd.DataFrame, n: int = 5) -> pd.DataFrame:
     def _dt(s):
@@ -937,14 +1062,10 @@ with tab2:
 with tab3:
     bar("Kompletní historie zápasů")
 
-    df_hist = DF_ALL
+    df_hist = build_full_history(DF_ALL)
 
-    # jen požadované sloupce (ať tam není nic navíc z Google Sheets)
-    df_hist = df_hist[COLUMNS].copy()
-    df_hist = df_hist.loc[:, [c for c in df_hist.columns if str(c).strip() != ""]]
-
-    # od nejnovějšího
-    df_hist = df_hist.iloc[::-1].copy()
+# pokud nechceš Sety ve kompletní historii, smaž tenhle řádek:
+# df_hist = df_hist.drop(columns=["Sety"])
 
     st.markdown("""
     <style>
