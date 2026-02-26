@@ -7,6 +7,7 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta
 import streamlit as st
 import streamlit_authenticator as stauth 
+import base64
 
 
 SHEET_NAME = "tennis_elo_template"
@@ -439,7 +440,46 @@ def get_last_matches(df: pd.DataFrame, n: int = 5) -> pd.DataFrame:
 
 # --- UI STREAMLIT ---
 st.set_page_config(page_title="Tennis ELO Žebříček", page_icon="🎾", layout="wide")
-st.title("🎾 Tennis ELO — Zápisy a Žebříček")
+# --- FUNKCE PRO NAČTENÍ OBRÁZKU DO HTML ---
+def get_base64_image(image_path):
+    with open(image_path, "rb") as img_file:
+        return base64.b64encode(img_file.read()).decode()
+
+# Načtení tvého obrázku
+try:
+    img_base64 = get_base64_image("ChatGPT Image 26. 2. 2026 19_37_23.jpg")
+    img_html = f'<img src="data:image/jpeg;base64,{img_base64}" style="height: 60px; margin-right: 20px; border-radius: 10px;">'
+except:
+    img_html = "🎾 " # Záloha, kdyby se obrázek nenačetl
+
+# Vykreslení hezkého nadpisu v obdélníku
+st.markdown(f"""
+    <div style="
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 15px;
+        padding: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 25px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    ">
+        {img_html}
+        <h1 style="
+            margin: 0;
+            padding: 0;
+            color: white;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            font-size: 32px;
+            font-weight: 800;
+        ">
+            TENIS ELO — Zápisy a žebříčky
+        </h1>
+    </div>
+""", unsafe_allow_html=True)
 
 # --- PŘIHLAŠOVÁNÍ (Levý panel) ---
 # Tato úprava zajistí, že si knihovna může do dat zapisovat (resetovat pokusy atd.)
