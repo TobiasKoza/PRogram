@@ -672,28 +672,33 @@ with tab_sd:
         bar("Žebříček Doubles")
         d_matches = df_sd[df_sd["type"] == "doubles"]
         d_stats = {}
-        
+
         for _, r in d_matches.iterrows():
             ta = [x.strip() for x in r["team_a"].split("+") if x.strip()]
             tb = [x.strip() for x in r["team_b"].split("+") if x.strip()]
-            if len(ta) != 2 or len(tb) != 2: continue
-            
+            if len(ta) != 2 or len(tb) != 2:
+                continue
+
             ta_key = " + ".join(sorted(ta))
             tb_key = " + ".join(sorted(tb))
             win = r["winner"].strip()
-            
-            if ta_key not in d_stats: d_stats[ta_key] = {"w": 0, "l": 0, "p1": ta[0], "p2": ta[1]}
-            if tb_key not in d_stats: d_stats[tb_key] = {"w": 0, "l": 0, "p1": tb[0], "p2": tb[1]}
-            
+
+            if ta_key not in d_stats:
+                d_stats[ta_key] = {"w": 0, "l": 0, "p1": ta[0], "p2": ta[1]}
+            if tb_key not in d_stats:
+                d_stats[tb_key] = {"w": 0, "l": 0, "p1": tb[0], "p2": tb[1]}
+
             if win == "A":
-                d_stats[ta_key]["w"] += 1; d_stats[tb_key]["l"] += 1
+                d_stats[ta_key]["w"] += 1
+                d_stats[tb_key]["l"] += 1
             elif win == "B":
-                d_stats[tb_key]["w"] += 1; d_stats[ta_key]["l"] += 1
+                d_stats[tb_key]["w"] += 1
+                d_stats[ta_key]["l"] += 1
 
         d_rows = []
         max_d_games = max([st_d["w"] + st_d["l"] for st_d in d_stats.values()]) if d_stats else 0
         d_threshold = max_d_games / 3.0
-        
+
         for d_k, st_d in d_stats.items():
             w, l = st_d["w"], st_d["l"]
             g = w + l
@@ -708,48 +713,68 @@ with tab_sd:
                 "Skóre": f"{w}:{l}",
                 "Úspěšnost": f"{pct:.1f}".replace('.', ',') + " %"
             })
-            
+
         d_df = pd.DataFrame(d_rows)
-        if not d_df.empty:
+
+        if d_df.empty:
+            st.info("Zatím žádné zápasy.")
+        else:
             # Řazení: 1. úspěšnost, 2. počet výher
             d_active = d_df[d_df["__games"] >= d_threshold].sort_values(["__pct", "__wins"], ascending=[False, False]).reset_index(drop=True)
             d_active.insert(0, "#", range(1, len(d_active) + 1))
             d_active = d_active.drop(columns=["__games", "__pct", "__wins"])
-            
+
             d_inactive = d_df[d_df["__games"] < d_threshold].sort_values(["__pct", "__wins"], ascending=[False, False]).reset_index(drop=True)
             d_inactive.insert(0, "#", range(1, len(d_inactive) + 1))
             d_inactive = d_inactive.drop(columns=["__games", "__pct", "__wins"])
-            
-            sep_d = {c: " " for c in d_active.columns}
-            sep_d["#"] = " "
-            d_limit_text = f"Dvojice s méně než {int(math.ceil(d_threshold))} zápasy"
-            sep_d["Dvojice"] = d_limit_text
-            sep_d_row = pd.DataFrame([sep_d])
-            
-            if d_inactive.empty:
-                d_out = d_active
-            elif d_active.empty:
-                d_out = d_inactive
-            else:
-                d_out = pd.concat([d_active, sep_d_row, d_inactive], ignore_index=True)
-                
-            def _d_row_style(row):
-                if str(row.get("Dvojice", "")).strip() == d_limit_text:
-                    return ["background-color: rgba(255,255,255,0.09); color: rgba(255,255,255,0.55); font-weight: 800;"] * len(row)
-                if str(row.get("#", "")).strip() != " " and str(row.get("Dvojice", "")).strip() in d_inactive["Dvojice"].values:
-                    return ["color: rgba(255,255,255,0.55); background-color: rgba(255,255,255,0.03);"] * len(row)
-                return [""] * len(row)
-                
-            def _d_hide_cells(row):
-                if str(row.get("Dvojice", "")).strip() == d_limit_text:
-                    return ["text-align: center;" if c == "Dvojice" else "color: rgba(255,255,255,0.0);" for c in d_out.columns]
-                return [""] * len(row)
-                
-            html_d = d_out.style.hide(axis="index").apply(_d_row_style, axis=1).apply(_d_hide_cells, axis=1).to_html()
-            st.markdown(f'<div class="hist-wrap">{html_d}</div>', unsafe_allow_html=True)
-        else:
-            st.info("Zatím žádné zápasy.")
 
+            d_limit_text = f"Dvojice s méně než {int(math.ceil(d_threshold))} zápasy"
+
+            # poskládej data tak, aby separator byl samostatný marker řádek
+            if d_inactive.empty:
+                d_out = d_active.copy()
+            elif d_active.empty:
+                d_out = d_inactive.copy()
+            else:
+                sep_row = pd.DataFrame([{"#": "__SEP__", "Dvojice": d_limit_text, "Průměrné ELO": "", "Skóre": "", "Úspěšnost": ""}])
+                d_out = pd.concat([d_active, sep_row, d_inactive], ignore_index=True)
+
+            # vygeneruj HTML tabulku a separatoru nastav colspan přes všechny sloupce
+            cols = list(d_out.columns)
+            ncols = len(cols)
+
+            parts = []
+            parts.append('<div class="hist-wrap"><table class="hist-table">')
+
+            # header
+            parts.append("<thead><tr>")
+            for c in cols:
+                parts.append(f"<th>{str(c)}</th>")
+            parts.append("</tr></thead>")
+
+            # body
+            parts.append("<tbody>")
+            for _, row in d_out.iterrows():
+                is_sep = str(row.get("#", "")).strip() == "__SEP__"
+                if is_sep:
+                    parts.append(
+                        f'<tr>'
+                        f'<td colspan="{ncols}" style="background-color: rgba(255,255,255,0.09); color: rgba(255,255,255,0.55); font-weight: 800; text-align: center;">'
+                        f'{d_limit_text}'
+                        f'</td>'
+                        f'</tr>'
+                    )
+                    continue
+
+                # běžné řádky
+                parts.append("<tr>")
+                for c in cols:
+                    v = row.get(c, "")
+                    parts.append(f"<td>{str(v)}</td>")
+                parts.append("</tr>")
+            parts.append("</tbody></table></div>")
+
+            st.markdown("".join(parts), unsafe_allow_html=True)
 # --- TAB 2: ZADÁNÍ ZÁPASU ---
 with tab2:
     all_players = sorted(compute_elo_with_meta()[0].keys())
