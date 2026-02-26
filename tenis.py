@@ -342,13 +342,48 @@ with tab1:
       margin: 8px 0 10px 0;
     }
 
-    /* tabulky full width v rámci sloupce */
-    div[data-testid="stDataFrame"] { width: 100% !important; }
-    div[data-testid="stDataFrame"] table { width: 100% !important; }
-
-    /* trochu menší písmo, ať se vejde "Zápas" na 100% zoom */
-    div[data-testid="stDataFrame"] * { font-size: 12.5px !important; }
-
+    /* Společný styl pro všechny vlastní HTML tabulky (vzhled z Tab 3) */
+    .hist-wrap {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      background: rgba(0,0,0,0.10);
+      margin-bottom: 20px;
+    }
+    .hist-wrap table {
+      border-collapse: collapse;
+      table-layout: auto;
+      width: max-content;
+      min-width: 100%;
+      color: rgba(255,255,255,0.90);
+      margin: 0;
+    }
+    .hist-wrap thead th {
+      position: sticky;
+      top: 0;
+      background: rgba(255,255,255,0.06) !important;
+      border-bottom: 1px solid rgba(255,255,255,0.10) !important;
+      font-weight: 800 !important;
+      text-align: center !important;
+    }
+    .hist-wrap th, .hist-wrap td {
+      padding: 10px 12px;
+      border-right: 1px solid rgba(255,255,255,0.06);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      white-space: nowrap;
+      text-align: center !important;
+      font-size: 12.5px !important;
+    }
+    .hist-wrap th:last-child, .hist-wrap td:last-child {
+      border-right: none;
+    }
+    .hist-wrap tr:last-child td {
+      border-bottom: none;
+    }
+    /* Skrytí prázdného th z pandas styleru (index sloupec) */
+    .hist-wrap .blank { display: none; }
+    .hist-wrap .row_heading { display: none; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -479,18 +514,18 @@ with tab1:
 
     players_styler = (
         players_out.style
+            .hide(axis="index")
             .apply(_row_style, axis=1)
             .apply(_sep_hide_cells, axis=1)
             .applymap(_delta_color, subset=[DELTA_COL])
-            .set_properties(**{'text-align': 'center'})
-            .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}])
     )
 
     left, right = st.columns([3, 2], gap="large")
 
     with left:
         st.markdown('<div class="section-bar">Aktuální žebříček ELO</div>', unsafe_allow_html=True)
-        st.dataframe(players_styler, use_container_width=True, hide_index=True)
+        html_left = players_styler.to_html()
+        st.markdown(f'<div class="hist-wrap">{html_left}</div>', unsafe_allow_html=True)
 
     with right:
         right_n = len(players_out)
@@ -506,13 +541,8 @@ with tab1:
             lastN_df = pd.concat([lastN_df, pad], ignore_index=True)
 
         st.markdown(f'<div class="section-bar">Posledních {shown_n} zápasů</div>', unsafe_allow_html=True)
-        st.dataframe(
-            lastN_df.style
-                .set_properties(**{'text-align': 'center'})
-                .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]),
-            use_container_width=True,
-            hide_index=True
-        )
+        html_right = lastN_df.to_html(index=False, border=0, escape=True)
+        st.markdown(f'<div class="hist-wrap">{html_right}</div>', unsafe_allow_html=True)
 
     df_all = load_data()
     all_players = sorted(list(set(list(ratings.keys()))))
@@ -533,9 +563,8 @@ with tab1:
     if hist_df.empty:
         st.info("Bez zápasů.")
     else:
-        st.dataframe(hist_df.style.set_properties(**{'text-align': 'center'}).set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]), use_container_width=False, hide_index=True)
-
-
+        html_hist = hist_df.to_html(index=False, border=0, escape=True)
+        st.markdown(f'<div class="hist-wrap">{html_hist}</div>', unsafe_allow_html=True)
 
 # --- TAB 2: ZADÁNÍ ZÁPASU ---
 with tab2:
