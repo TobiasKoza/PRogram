@@ -1188,12 +1188,48 @@ with tab2:
 # --- TAB 3: HISTORIE ---
 
 # --- TAB 3: HISTORIE ---
+# --- TAB 3: HISTORIE ---
 with tab3:
     bar("Kompletní historie zápasů")
 
     df_hist = build_full_history(DF_ALL)
-    
-    # Pro tabulku skryjeme pomocný sloupec s indexem řádku
+
+    # --- 1. ADMIN SEKCE POUZE PRO TOBIHO (NAD TABULKOU) ---
+    if st.session_state.get("authentication_status") and st.session_state.get("name") == "Tobi":
+        with st.expander("🛠️ Admin správa zápasů (Klikni pro otevření)", expanded=False):
+            st.subheader("Odstranění zápasu")
+            
+            # Vytvoříme seznam pro selectbox (Datum | Typ | Zápas)
+            if not df_hist.empty:
+                match_options = df_hist.apply(lambda x: f"{x['Datum']} | {x['Typ']} | {x['Zápas']}", axis=1).tolist()
+                selected_match_str = st.selectbox("Vyber zápas ke smazání:", options=match_options, index=None, placeholder="Vyber řádek z historie...")
+
+                @st.dialog("⚠️ Potvrdit smazání")
+                def delete_dialog(row_to_delete, info):
+                    st.warning(f"Opravdu chceš smazat tento zápas?")
+                    st.code(info)
+                    st.error("Tahle akce je nevratná!")
+                    
+                    c1, c2 = st.columns(2)
+                    if c1.button("🔥 Ano, smazat", type="primary", use_container_width=True):
+                        delete_match_by_row(row_to_delete)
+                        st.success("Smazáno!")
+                        st.rerun()
+                    if c2.button("Zrušit", use_container_width=True):
+                        st.rerun()
+
+                if selected_match_str:
+                    if st.button("🗑️ Odstranit vybraný zápas", type="secondary", use_container_width=True):
+                        idx = match_options.index(selected_match_str)
+                        target_row = df_hist.iloc[idx]["row_idx"]
+                        delete_dialog(target_row, selected_match_str)
+            else:
+                st.info("Historie je prázdná, není co mazat.")
+        
+        st.write("---") # Oddělovač mezi adminem a tabulkou
+
+    # --- 2. VYKRESLENÍ TABULKY HISTORIE ---
+    # Skryjeme pomocný sloupec pro zobrazení
     display_df = df_hist.drop(columns=["row_idx"]) if "row_idx" in df_hist.columns else df_hist
 
     st.markdown("""
@@ -1204,7 +1240,6 @@ with tab3:
         border: 1px solid rgba(255,255,255,0.08);
         border-radius: 12px;
         background: rgba(0,0,0,0.10);
-        margin-bottom: 20px;
       }
       table.hist-table{
         border-collapse: collapse;
@@ -1232,36 +1267,8 @@ with tab3:
     </style>
     """, unsafe_allow_html=True)
 
-    html_table = display_df.to_html(index=False, classes="hist-table", border=0, escape=True)
-    st.markdown(f'<div class="hist-wrap">{html_table}</div>', unsafe_allow_html=True)
-
-    # --- ADMIN SEKCE POUZE PRO TOBIHO ---
-    # Kontrola, zda je přihlášený uživatel se jménem "Tobi"
-    if st.session_state.get("authentication_status") and st.session_state.get("name") == "Tobi":
-        st.write("---")
-        st.subheader("🛠️ Admin správa zápasů")
-        
-        # Vytvoříme seznam pro selectbox (Datum + Zápas)
-        match_options = df_hist.apply(lambda x: f"{x['Datum']} | {x['Typ']} | {x['Zápas']}", axis=1).tolist()
-        selected_match_str = st.selectbox("Vyber zápas ke smazání:", options=match_options, index=None, placeholder="Vyber řádek z historie...")
-
-        @st.dialog("⚠️ Potvrdit smazání")
-        def delete_dialog(row_to_delete, info):
-            st.warning(f"Opravdu chceš smazat tento zápas?")
-            st.code(info)
-            st.error("Tahle akce nejde vrátit zpět!")
-            
-            c1, c2 = st.columns(2)
-            if c1.button("🔥 Ano, smazat", type="primary", use_container_width=True):
-                delete_match_by_row(row_to_delete)
-                st.success("Zápas byl vymazán z databáze.")
-                st.rerun()
-            if c2.button("Zrušit", use_container_width=True):
-                st.rerun()
-
-        if selected_match_str:
-            if st.button("🗑️ Odstranit vybraný zápas", use_container_width=True):
-                # Najdeme index vybraného zápasu a jeho row_idx
-                idx = match_options.index(selected_match_str)
-                target_row = df_hist.iloc[idx]["row_idx"]
-                delete_dialog(target_row, selected_match_str)
+    if not display_df.empty:
+        html_table = display_df.to_html(index=False, classes="hist-table", border=0, escape=True)
+        st.markdown(f'<div class="hist-wrap">{html_table}</div>', unsafe_allow_html=True)
+    else:
+        st.info("Zatím nejsou k dispozici žádné záznamy.")
