@@ -1132,7 +1132,7 @@ with tab2:
 
         with adj_col1:
             bar("Upravit existující ELO")
-            adj_player = st.selectbox("Hráč", all_players, placeholder="— nevybráno —", key="adj_p")
+            adj_player = st.selectbox("Hráč", all_players, index=None, placeholder="— nevybráno —", key="adj_p")
             adj_delta = st.number_input("Změna (např. 5 nebo -3)", step=1, key="adj_delta")
             adj_reason = st.text_input("Důvod úpravy", key="adj_reason")
 
@@ -1165,7 +1165,8 @@ with tab2:
                         "type": "adjust",
                         "team_a": new_name,
                         "team_b": delta,
-                        "reason": f"Přidání hráče({new_elo} ELO)"
+                        "reason": f"Přidání hráče({new_elo} ELO)",
+                        "author": st.session_state.get("name", "Neznámý")
                     })
                     st.session_state["_player_added"] = True
                     st.session_state["_clear_add"] = True
