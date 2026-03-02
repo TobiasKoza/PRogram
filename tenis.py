@@ -439,34 +439,11 @@ def get_last_matches(df: pd.DataFrame, n: int = 5) -> pd.DataFrame:
 def compute_player_stats_cached(df: pd.DataFrame, current_user: str):
     """
     Vrátí hotové tabulky + pomocné struktury pro Tab 'Statistika hráče'.
-    Cache se invaliduje automaticky, když se změní df (Streamlit si ho hashne).
     """
-
-    # Pomocná funkce pro parsování hráčů
     def get_players(team_str):
         return [p.strip() for p in str(team_str).split("+") if p.strip()]
 
     MATCH_TYPES = {"singles", "doubles", "friendly_singles", "friendly_doubles"}
-
-    # Získání celkových statistik hráče (pro H2H porovnání)
-    def get_player_season_stats(player_name):
-        w, l = 0, 0
-        for _, r in df.iterrows():
-            if r["type"] not in MATCH_TYPES:
-                continue
-            ta = get_players(r["team_a"])
-            tb = get_players(r["team_b"])
-            if player_name in ta:
-                if r["winner"] == "A":
-                    w += 1
-                elif r["winner"] == "B":
-                    l += 1
-            elif player_name in tb:
-                if r["winner"] == "B":
-                    w += 1
-                elif r["winner"] == "A":
-                    l += 1
-        return w, l
 
     singles_opponents = {}
     doubles_partners = {}
@@ -537,16 +514,14 @@ def compute_player_stats_cached(df: pd.DataFrame, current_user: str):
     df_d_partners = build_stat_df(doubles_partners, "Parťák (Doubles)")
     df_d_opponents = build_stat_df(doubles_opponents, "Soupeři (Doubles)")
 
+    # VRACÍME POUZE DATA (tabulky a slovníky), NE FUNKCE!
     return (
         df_singles,
         df_d_partners,
         df_d_opponents,
         singles_opponents,
         doubles_partners,
-        doubles_opponents,
-        get_player_season_stats,
-        get_players,
-        MATCH_TYPES,
+        doubles_opponents
     )
 
 
@@ -1173,6 +1148,25 @@ with tab_stats:
         
         df_all = DF_ALL
         
+        # --- POMOCNÉ FUNKCE (přesunuty sem z cache) ---
+        def get_players(team_str):
+            return [p.strip() for p in str(team_str).split("+") if p.strip()]
+
+        def get_player_season_stats(player_name):
+            w, l = 0, 0
+            for _, r in df_all.iterrows():
+                if r["type"] not in ["singles", "doubles", "friendly_singles", "friendly_doubles"]: continue
+                ta = get_players(r["team_a"])
+                tb = get_players(r["team_b"])
+                if player_name in ta:
+                    if r["winner"] == "A": w += 1
+                    elif r["winner"] == "B": l += 1
+                elif player_name in tb:
+                    if r["winner"] == "B": w += 1
+                    elif r["winner"] == "A": l += 1
+            return w, l
+        
+        # Rozbalení pouze dat z cache
         (
             df_singles,
             df_d_partners,
@@ -1180,9 +1174,6 @@ with tab_stats:
             singles_opponents,
             doubles_partners,
             doubles_opponents,
-            get_player_season_stats,
-            get_players,
-            MATCH_TYPES,
         ) = compute_player_stats_cached(df_all, current_user)
 
         # Vykreslení horních tabulek
