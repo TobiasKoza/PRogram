@@ -615,11 +615,11 @@ def _remember_changed():
 if not st.session_state.get("authentication_status"):
     st.markdown("""
     <style>
-      /* posune JEDINÝ checkbox v sidebaru nahoru (pod password pole) */
-      [data-testid="stSidebar"] [data-testid="stCheckbox"]{
-        margin-top: -58px;   /* doladíš podle potřeby: -48 až -70 */
-        margin-bottom: 8px;
-      }
+    /* checkbox v sidebaru vytáhni mezi Password a Login */
+    [data-testid="stSidebar"] [data-testid="stCheckbox"]{
+        margin-top: -96px;   /* typicky -80 až -110 */
+        margin-bottom: 18px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
