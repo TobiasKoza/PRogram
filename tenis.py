@@ -516,7 +516,14 @@ def bar(text: str):
     st.markdown(f'<div class="section-bar">{text}</div>', unsafe_allow_html=True)
 
 # Záložky pro přepínání obsahu
-tab1, tab_sd, tab2, tab3 = st.tabs(["🏆 Žebříček", "🎾 Singles & Doubles", "✍️ Zadat zápas nebo přidat hráče", "📜 Kompletní historie"])
+# Zjištění jména pro dynamický název záložky
+if st.session_state.get("authentication_status"):
+    stat_tab_name = f"📊 Statistika hráče: {st.session_state.get('name')}"
+else:
+    stat_tab_name = "📊 Statistika hráče"
+
+# Záložky pro přepínání obsahu
+tab1, tab_sd, tab_stats, tab2, tab3 = st.tabs(["🏆 Žebříček", "🎾 Singles & Doubles", stat_tab_name, "✍️ Zadat zápas nebo přidat hráče", "📜 Kompletní historie"])
 
 # načti sheet JEDNOU pro celý run
 DF_ALL = load_data()
@@ -1044,7 +1051,224 @@ with tab_sd:
 
             st.markdown("".join(parts), unsafe_allow_html=True)
 
+# --- TAB STATISTIKY PŘIHLÁŠENÉHO HRÁČE ---
+with tab_stats:
+    if not st.session_state.get("authentication_status"):
+        st.warning("⚠️ Pro zobrazení osobních statistik se musíš přihlásit v levém panelu.")
+    else:
+        current_user = st.session_state.get("name")
+        bar(f"Statistiky hráče: {current_user}")
+        
+        df_all = DF_ALL.copy()
+        
+        # Pomocná funkce pro parsování hráčů
+        def get_players(team_str):
+            return [p.strip() for p in str(team_str).split("+") if p.strip()]
 
+        # Získání celkových statistik hráče (pro H2H porovnání)
+        def get_player_season_stats(player_name):
+            w, l = 0, 0
+            for _, r in df_all.iterrows():
+                if r["type"] not in ["singles", "doubles", "friendly_singles", "friendly_doubles"]: continue
+                ta = get_players(r["team_a"])
+                tb = get_players(r["team_b"])
+                if player_name in ta:
+                    if r["winner"] == "A": w += 1
+                    elif r["winner"] == "B": l += 1
+                elif player_name in tb:
+                    if r["winner"] == "B": w += 1
+                    elif r["winner"] == "A": l += 1
+            return w, l
+
+        # Data pro tabulky
+        singles_opponents = {}
+        doubles_partners = {}
+        doubles_opponents = {}
+
+        for _, r in df_all.iterrows():
+            ta = get_players(r["team_a"])
+            tb = get_players(r["team_b"])
+            win = r["winner"]
+            
+            # Je current_user vůbec v zápase?
+            if current_user not in ta and current_user not in tb:
+                continue
+
+            my_team = ta if current_user in ta else tb
+            opp_team = tb if current_user in ta else ta
+            is_win = (current_user in ta and win == "A") or (current_user in tb and win == "B")
+            is_loss = (current_user in ta and win == "B") or (current_user in tb and win == "A")
+
+            # Singles
+            if "singles" in r["type"] and len(my_team) == 1 and len(opp_team) == 1:
+                opp = opp_team[0]
+                if opp not in singles_opponents: singles_opponents[opp] = {"w": 0, "l": 0}
+                if is_win: singles_opponents[opp]["w"] += 1
+                elif is_loss: singles_opponents[opp]["l"] += 1
+
+            # Doubles
+            if "doubles" in r["type"] and len(my_team) == 2 and len(opp_team) == 2:
+                # Parťák
+                partner = my_team[0] if my_team[1] == current_user else my_team[1]
+                if partner not in doubles_partners: doubles_partners[partner] = {"w": 0, "l": 0}
+                if is_win: doubles_partners[partner]["w"] += 1
+                elif is_loss: doubles_partners[partner]["l"] += 1
+                
+                # Soupeři
+                opp_key = f"{opp_team[0]} + {opp_team[1]}"
+                if opp_key not in doubles_opponents: doubles_opponents[opp_key] = {"w": 0, "l": 0}
+                if is_win: doubles_opponents[opp_key]["w"] += 1
+                elif is_loss: doubles_opponents[opp_key]["l"] += 1
+
+        # Generování DataFrame z dict
+        def build_stat_df(stat_dict, col_name):
+            rows = []
+            for k, v in stat_dict.items():
+                g = v["w"] + v["l"]
+                pct = (v["w"] / g * 100) if g > 0 else 0
+                rows.append({
+                    col_name: k,
+                    "Zápasů": g,
+                    "Výhry": v["w"],
+                    "Prohry": v["l"],
+                    "Úspěšnost": f"{pct:.1f} %".replace('.', ',')
+                })
+            return pd.DataFrame(rows).sort_values("Zápasů", ascending=False).reset_index(drop=True)
+
+        df_singles = build_stat_df(singles_opponents, "Soupeř (Singles)")
+        df_d_partners = build_stat_df(doubles_partners, "Parťák (Doubles)")
+        df_d_opponents = build_stat_df(doubles_opponents, "Soupeři (Doubles)")
+
+        # Vykreslení horních tabulek
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.markdown("**🆚 Dvouhra (Proti)**")
+            st.dataframe(df_singles, use_container_width=True, hide_index=True)
+        with c2:
+            st.markdown("**🤝 Čtyřhra (Parťák)**")
+            st.dataframe(df_d_partners, use_container_width=True, hide_index=True)
+        with c3:
+            st.markdown("**⚔️ Čtyřhra (Proti)**")
+            st.dataframe(df_d_opponents, use_container_width=True, hide_index=True)
+
+        st.divider()
+        
+        # --- HEAD TO HEAD SELECTION ---
+        st.subheader("🔍 Detailní Head-to-Head")
+        all_opponents = sorted(list(singles_opponents.keys()))
+        
+        col_sel, _ = st.columns([1, 1])
+        with col_sel:
+            selected_opp = st.selectbox("Vyber soupeře pro detailní srovnání (Dvouhra):", options=all_opponents, index=None, placeholder="— vyber soupeře —")
+        
+        if selected_opp:
+            # Výpočet dat pro H2H kartu
+            p1_w, p1_l = get_player_season_stats(current_user)
+            p2_w, p2_l = get_player_season_stats(selected_opp)
+            
+            p1_g, p2_g = p1_w + p1_l, p2_w + p2_l
+            p1_pct = f"{(p1_w/p1_g*100):.2f}%".replace('.', ',') if p1_g > 0 else "0,00%"
+            p2_pct = f"{(p2_w/p2_g*100):.2f}%".replace('.', ',') if p2_g > 0 else "0,00%"
+            
+            h2h_w = singles_opponents[selected_opp]["w"]
+            h2h_l = singles_opponents[selected_opp]["l"]
+            h2h_g = h2h_w + h2h_l
+            h2h_w_pct = f"{(h2h_w/h2h_g*100):.2f}%".replace('.', ',') if h2h_g > 0 else "0,00%"
+            h2h_l_pct = f"{(h2h_l/h2h_g*100):.2f}%".replace('.', ',') if h2h_g > 0 else "0,00%"
+
+            # Design karty H2H 
+            st.markdown(f"""
+            <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); margin-top: 10px;">
+                <h3 style="text-align: center; margin-top: 0;">Bilance sezóny</h3>
+                
+                <div style="display: flex; justify-content: space-between; text-align: center; margin-bottom: 20px;">
+                    <div style="width: 30%;">
+                        <h4 style="color: #3498db; margin-bottom: 5px;">{current_user}</h4>
+                        <p style="margin:5px 0;"><b>{p1_g}</b></p>
+                        <p style="margin:5px 0; color: #2ecc71;">{p1_w}</p>
+                        <p style="margin:5px 0; color: #e74c3c;">{p1_l}</p>
+                        <p style="margin:5px 0; font-weight: bold;">{p1_pct}</p>
+                    </div>
+                    <div style="width: 30%;">
+                        <h4 style="color: gray; margin-bottom: 5px; visibility: hidden;">Text</h4>
+                        <p style="margin:5px 0; color: gray;">Zápasů</p>
+                        <p style="margin:5px 0; color: gray;">Výhry</p>
+                        <p style="margin:5px 0; color: gray;">Prohry</p>
+                        <p style="margin:5px 0; color: gray;">Úspěšnost</p>
+                    </div>
+                    <div style="width: 30%;">
+                        <h4 style="color: #e67e22; margin-bottom: 5px;">{selected_opp}</h4>
+                        <p style="margin:5px 0;"><b>{p2_g}</b></p>
+                        <p style="margin:5px 0; color: #2ecc71;">{p2_w}</p>
+                        <p style="margin:5px 0; color: #e74c3c;">{p2_l}</p>
+                        <p style="margin:5px 0; font-weight: bold;">{p2_pct}</p>
+                    </div>
+                </div>
+
+                <hr style="border-color: rgba(255,255,255,0.1); margin: 20px 0;">
+                <h3 style="text-align: center; margin-top: 0;">Vzájemné dvouhry celkem</h3>
+
+                <div style="display: flex; justify-content: space-between; text-align: center; margin-top: 20px;">
+                    <div style="width: 30%;">
+                        <p style="margin:5px 0;"><b>{h2h_g}</b></p>
+                        <p style="margin:5px 0; color: #2ecc71;">{h2h_w}</p>
+                        <p style="margin:5px 0; color: #e74c3c;">{h2h_l}</p>
+                        <p style="margin:5px 0; font-weight: bold;">{h2h_w_pct}</p>
+                    </div>
+                    <div style="width: 30%;">
+                        <p style="margin:5px 0; color: gray;">Zápasů</p>
+                        <p style="margin:5px 0; color: gray;">Výhry</p>
+                        <p style="margin:5px 0; color: gray;">Prohry</p>
+                        <p style="margin:5px 0; color: gray;">Úspěšnost</p>
+                    </div>
+                    <div style="width: 30%;">
+                        <p style="margin:5px 0;"><b>{h2h_g}</b></p>
+                        <p style="margin:5px 0; color: #2ecc71;">{h2h_l}</p>
+                        <p style="margin:5px 0; color: #e74c3c;">{h2h_w}</p>
+                        <p style="margin:5px 0; font-weight: bold;">{h2h_l_pct}</p>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Výpis konkrétních zápasů pod H2H kartou
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown(f"**Vzájemné zápasy ({current_user} vs {selected_opp}):**")
+            
+            h2h_matches = []
+            for _, r in df_all.iterrows():
+                if "singles" not in r["type"]: continue
+                ta = get_players(r["team_a"])
+                tb = get_players(r["team_b"])
+                if (current_user in ta and selected_opp in tb) or (current_user in tb and selected_opp in ta):
+                    winner_name = ta[0] if r["winner"] == "A" else tb[0]
+                    
+                    # Čistíme sety pro hezčí výpis
+                    sets_clean = str(r["sets"]).replace("'", "").strip()
+                    
+                    h2h_matches.append({
+                        "Datum": r["date"],
+                        "Zápas": f"{ta[0]} vs {tb[0]}",
+                        "Vítěz": winner_name,
+                        "Skóre": r["score"],
+                        "Sety": sets_clean
+                    })
+                    
+            if h2h_matches:
+                df_h2h = pd.DataFrame(h2h_matches).iloc[::-1] # Otočit od nejnovějšího
+                
+                # Zvýraznění výher/proher v tabulce
+                def highlight_winner(val):
+                    if val == current_user:
+                        return 'color: #2ecc71; font-weight: bold;'
+                    elif val == selected_opp:
+                        return 'color: #e74c3c; font-weight: bold;'
+                    return ''
+                
+                styled_df = df_h2h.style.map(highlight_winner, subset=['Vítěz'])
+                st.dataframe(styled_df, use_container_width=True, hide_index=True)
+            else:
+                st.info("Nenalezena žádná detailní historie.")
 # --- TAB 2: ZADÁNÍ ZÁPASU ---
 # --- TAB 2: ZADÁNÍ ZÁPASU ---
 with tab2:
