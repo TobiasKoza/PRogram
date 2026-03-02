@@ -610,7 +610,7 @@ authenticator = stauth.Authenticate(
     expiry_days
 )
 
-# Vykreslení samotného přihlašovacího formuláře (Jméno, Heslo, tlačítko Login)
+# Vykreslení samotného přihlašovacího formuláře (Jméno, Heslo, tlačítko Login) JEDNOU
 authenticator.login(location="sidebar")
 
 # Náš checkbox vykreslíme až POD formulářem (pod tlačítkem Login)
@@ -625,15 +625,6 @@ elif st.session_state["authentication_status"] is False:
 elif st.session_state["authentication_status"] is None:
     st.sidebar.warning('Pro zápis výsledků se přihlas')
 
-authenticator.login(location="sidebar")
-
-if st.session_state["authentication_status"]:
-    authenticator.logout("Odhlásit se", location="sidebar")
-    st.sidebar.success(f'Přihlášen jako: **{st.session_state["name"]}**')
-elif st.session_state["authentication_status"] is False:
-    st.sidebar.error('Špatné uživatelské jméno nebo heslo')
-elif st.session_state["authentication_status"] is None:
-    st.sidebar.warning('Pro zápis výsledků se přihlas')
 
 def bar(text: str):
     st.markdown(f'<div class="section-bar">{text}</div>', unsafe_allow_html=True)
@@ -650,7 +641,6 @@ tab1, tab_sd, tab_stats, tab2, tab3 = st.tabs(["🏆 Žebříček", "🎾 Single
 
 # načti sheet JEDNOU pro celý run
 DF_ALL = load_data()
-
 # --- TAB 1: ŽEBŘÍČEK ---
 with tab1:
     st.markdown("""
