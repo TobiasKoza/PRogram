@@ -1156,19 +1156,31 @@ with tab_stats:
 # --- DETAILNÍ ROZBORY (VÝBĚR) ---
         st.subheader("🔍 Detailní rozbory (Dvouhra a Čtyřhra)")
         
-        # Rozdělíme výběr do dvou sloupců
+        # Logika pro vzájemné nulování roletek
+        if "sel_opp" not in st.session_state:
+            st.session_state.sel_opp = None
+        if "sel_partner" not in st.session_state:
+            st.session_state.sel_partner = None
+
+        def reset_partner():
+            st.session_state.sel_partner = None
+
+        def reset_opp():
+            st.session_state.sel_opp = None
+        
         col_sel_s, col_sel_d = st.columns(2)
         
         with col_sel_s:
             all_opponents = sorted(list(singles_opponents.keys()))
-            selected_opp = st.selectbox("🎯 Detail soupeře (Dvouhra):", options=all_opponents, index=None, placeholder="— vyber soupeře —")
+            st.selectbox("🎯 Detail soupeře (Dvouhra):", options=all_opponents, index=None, placeholder="— vyber soupeře —", key="sel_opp", on_change=reset_partner)
             
         with col_sel_d:
             all_partners = sorted(list(doubles_partners.keys()))
-            selected_partner = st.selectbox("🤝 Detail parťáka (Čtyřhra):", options=all_partners, index=None, placeholder="— vyber parťáka —")
+            st.selectbox("🤝 Detail parťáka (Čtyřhra):", options=all_partners, index=None, placeholder="— vyber parťáka —", key="sel_partner", on_change=reset_opp)
         
         # --- VYKRESLENÍ DVOUHRY ---
-        if selected_opp:
+        if st.session_state.sel_opp:
+            selected_opp = st.session_state.sel_opp
             p1_w, p1_l = get_player_season_stats(current_user)
             p2_w, p2_l = get_player_season_stats(selected_opp)
             
@@ -1182,59 +1194,58 @@ with tab_stats:
             h2h_w_pct = f"{(h2h_w/h2h_g*100):.2f}%".replace('.', ',') if h2h_g > 0 else "0,00%"
             h2h_l_pct = f"{(h2h_l/h2h_g*100):.2f}%".replace('.', ',') if h2h_g > 0 else "0,00%"
 
-            st.markdown(f"""
-            <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); margin-top: 10px;">
-                <h3 style="text-align: center; margin-top: 0;">Bilance sezóny</h3>
-                
-                <div style="display: flex; justify-content: space-between; text-align: center; margin-bottom: 20px;">
-                    <div style="width: 30%;">
-                        <h4 style="color: #3498db; margin-bottom: 5px;">{current_user}</h4>
-                        <p style="margin:5px 0;"><b>{p1_g}</b></p>
-                        <p style="margin:5px 0; color: #2ecc71;">{p1_w}</p>
-                        <p style="margin:5px 0; color: #e74c3c;">{p1_l}</p>
-                        <p style="margin:5px 0; font-weight: bold;">{p1_pct}</p>
-                    </div>
-                    <div style="width: 30%;">
-                        <h4 style="color: gray; margin-bottom: 5px; visibility: hidden;">Text</h4>
-                        <p style="margin:5px 0; color: gray;">Zápasů</p>
-                        <p style="margin:5px 0; color: gray;">Výhry</p>
-                        <p style="margin:5px 0; color: gray;">Prohry</p>
-                        <p style="margin:5px 0; color: gray;">Úspěšnost</p>
-                    </div>
-                    <div style="width: 30%;">
-                        <h4 style="color: #e67e22; margin-bottom: 5px;">{selected_opp}</h4>
-                        <p style="margin:5px 0;"><b>{p2_g}</b></p>
-                        <p style="margin:5px 0; color: #2ecc71;">{p2_w}</p>
-                        <p style="margin:5px 0; color: #e74c3c;">{p2_l}</p>
-                        <p style="margin:5px 0; font-weight: bold;">{p2_pct}</p>
-                    </div>
-                </div>
-
-                <hr style="border-color: rgba(255,255,255,0.1); margin: 20px 0;">
-                <h3 style="text-align: center; margin-top: 0;">Vzájemné dvouhry celkem</h3>
-
-                <div style="display: flex; justify-content: space-between; text-align: center; margin-top: 20px;">
-                    <div style="width: 30%;">
-                        <p style="margin:5px 0;"><b>{h2h_g}</b></p>
-                        <p style="margin:5px 0; color: #2ecc71;">{h2h_w}</p>
-                        <p style="margin:5px 0; color: #e74c3c;">{h2h_l}</p>
-                        <p style="margin:5px 0; font-weight: bold;">{h2h_w_pct}</p>
-                    </div>
-                    <div style="width: 30%;">
-                        <p style="margin:5px 0; color: gray;">Zápasů</p>
-                        <p style="margin:5px 0; color: gray;">Výhry</p>
-                        <p style="margin:5px 0; color: gray;">Prohry</p>
-                        <p style="margin:5px 0; color: gray;">Úspěšnost</p>
-                    </div>
-                    <div style="width: 30%;">
-                        <p style="margin:5px 0;"><b>{h2h_g}</b></p>
-                        <p style="margin:5px 0; color: #2ecc71;">{h2h_l}</p>
-                        <p style="margin:5px 0; color: #e74c3c;">{h2h_w}</p>
-                        <p style="margin:5px 0; font-weight: bold;">{h2h_l_pct}</p>
-                    </div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            # Zarovnáno doleva, aby z toho Markdown neudělal blok kódu!
+            html_s = f"""
+<div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); margin-top: 10px;">
+    <h3 style="text-align: center; margin-top: 0;">Bilance sezóny</h3>
+    <div style="display: flex; justify-content: space-between; text-align: center; margin-bottom: 20px;">
+        <div style="width: 30%;">
+            <h4 style="color: #3498db; margin-bottom: 5px;">{current_user}</h4>
+            <p style="margin:5px 0;"><b>{p1_g}</b></p>
+            <p style="margin:5px 0; color: #2ecc71;">{p1_w}</p>
+            <p style="margin:5px 0; color: #e74c3c;">{p1_l}</p>
+            <p style="margin:5px 0; font-weight: bold;">{p1_pct}</p>
+        </div>
+        <div style="width: 30%;">
+            <h4 style="color: gray; margin-bottom: 5px; visibility: hidden;">Text</h4>
+            <p style="margin:5px 0; color: gray;">Zápasů</p>
+            <p style="margin:5px 0; color: gray;">Výhry</p>
+            <p style="margin:5px 0; color: gray;">Prohry</p>
+            <p style="margin:5px 0; color: gray;">Úspěšnost</p>
+        </div>
+        <div style="width: 30%;">
+            <h4 style="color: #e67e22; margin-bottom: 5px;">{selected_opp}</h4>
+            <p style="margin:5px 0;"><b>{p2_g}</b></p>
+            <p style="margin:5px 0; color: #2ecc71;">{p2_w}</p>
+            <p style="margin:5px 0; color: #e74c3c;">{p2_l}</p>
+            <p style="margin:5px 0; font-weight: bold;">{p2_pct}</p>
+        </div>
+    </div>
+    <hr style="border-color: rgba(255,255,255,0.1); margin: 20px 0;">
+    <h3 style="text-align: center; margin-top: 0;">Vzájemné dvouhry celkem</h3>
+    <div style="display: flex; justify-content: space-between; text-align: center; margin-top: 20px;">
+        <div style="width: 30%;">
+            <p style="margin:5px 0;"><b>{h2h_g}</b></p>
+            <p style="margin:5px 0; color: #2ecc71;">{h2h_w}</p>
+            <p style="margin:5px 0; color: #e74c3c;">{h2h_l}</p>
+            <p style="margin:5px 0; font-weight: bold;">{h2h_w_pct}</p>
+        </div>
+        <div style="width: 30%;">
+            <p style="margin:5px 0; color: gray;">Zápasů</p>
+            <p style="margin:5px 0; color: gray;">Výhry</p>
+            <p style="margin:5px 0; color: gray;">Prohry</p>
+            <p style="margin:5px 0; color: gray;">Úspěšnost</p>
+        </div>
+        <div style="width: 30%;">
+            <p style="margin:5px 0;"><b>{h2h_g}</b></p>
+            <p style="margin:5px 0; color: #2ecc71;">{h2h_l}</p>
+            <p style="margin:5px 0; color: #e74c3c;">{h2h_w}</p>
+            <p style="margin:5px 0; font-weight: bold;">{h2h_l_pct}</p>
+        </div>
+    </div>
+</div>
+"""
+            st.markdown(html_s, unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown(f"**Vzájemné zápasy ({current_user} vs {selected_opp}):**")
@@ -1267,36 +1278,38 @@ with tab_stats:
                 st.info("Nenalezena žádná detailní historie.")
 
         # --- VYKRESLENÍ ČTYŘHRY (PARŤÁK) ---
-        if selected_partner:
+        if st.session_state.sel_partner:
+            selected_partner = st.session_state.sel_partner
             part_w = doubles_partners[selected_partner]["w"]
             part_l = doubles_partners[selected_partner]["l"]
             part_g = part_w + part_l
             part_pct = f"{(part_w/part_g*100):.2f}%".replace('.', ',') if part_g > 0 else "0,00%"
 
-            st.markdown(f"""
-            <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); margin-top: 10px;">
-                <h3 style="text-align: center; margin-top: 0; color: #f1c40f;">Společná bilance: {current_user} & {selected_partner}</h3>
-                
-                <div style="display: flex; justify-content: space-around; text-align: center; margin-top: 20px;">
-                    <div>
-                        <p style="margin:5px 0; color: gray;">Zápasů</p>
-                        <p style="margin:5px 0; font-size: 20px;"><b>{part_g}</b></p>
-                    </div>
-                    <div>
-                        <p style="margin:5px 0; color: gray;">Výhry</p>
-                        <p style="margin:5px 0; color: #2ecc71; font-size: 20px;"><b>{part_w}</b></p>
-                    </div>
-                    <div>
-                        <p style="margin:5px 0; color: gray;">Prohry</p>
-                        <p style="margin:5px 0; color: #e74c3c; font-size: 20px;"><b>{part_l}</b></p>
-                    </div>
-                    <div>
-                        <p style="margin:5px 0; color: gray;">Úspěšnost</p>
-                        <p style="margin:5px 0; font-size: 20px;"><b>{part_pct}</b></p>
-                    </div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            # Opět zarovnáno doleva!
+            html_d = f"""
+<div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); margin-top: 10px;">
+    <h3 style="text-align: center; margin-top: 0; color: #f1c40f;">Společná bilance: {current_user} & {selected_partner}</h3>
+    <div style="display: flex; justify-content: space-around; text-align: center; margin-top: 20px;">
+        <div>
+            <p style="margin:5px 0; color: gray;">Zápasů</p>
+            <p style="margin:5px 0; font-size: 20px;"><b>{part_g}</b></p>
+        </div>
+        <div>
+            <p style="margin:5px 0; color: gray;">Výhry</p>
+            <p style="margin:5px 0; color: #2ecc71; font-size: 20px;"><b>{part_w}</b></p>
+        </div>
+        <div>
+            <p style="margin:5px 0; color: gray;">Prohry</p>
+            <p style="margin:5px 0; color: #e74c3c; font-size: 20px;"><b>{part_l}</b></p>
+        </div>
+        <div>
+            <p style="margin:5px 0; color: gray;">Úspěšnost</p>
+            <p style="margin:5px 0; font-size: 20px;"><b>{part_pct}</b></p>
+        </div>
+    </div>
+</div>
+"""
+            st.markdown(html_d, unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown(f"**Historie zápasů po boku parťáka ({selected_partner}):**")
