@@ -595,11 +595,21 @@ st.markdown(f"""
 # Tato úprava zajistí, že si knihovna může do dat zapisovat (resetovat pokusy atd.)
 credentials = st.secrets["credentials"].to_dict()
 
+# Trik: Zobrazíme checkbox nad formulářem POUZE pokud hráč není přihlášen
+if not st.session_state.get("authentication_status"):
+    st.sidebar.markdown("<br>", unsafe_allow_html=True) # Malá mezera seshora
+    remember_me = st.sidebar.checkbox("☑️ Zapamatovat si mě (30 dní)", value=True)
+    # Pokud zaškrtne, cookie vydrží 30 dní. Pokud ne, vyprší za 1 den.
+    expiry_days = 30 if remember_me else 1
+else:
+    # Pokud už je přihlášený (pro zobrazení tlačítka odhlásit)
+    expiry_days = 30 
+
 authenticator = stauth.Authenticate(
     credentials,
     st.secrets["cookie"]["name"],
     st.secrets["cookie"]["key"],
-    st.secrets["cookie"]["expiry_days"]
+    expiry_days  # Zde použijeme naši dynamickou dobu expirace
 )
 
 authenticator.login(location="sidebar")
