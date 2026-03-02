@@ -594,7 +594,7 @@ st.markdown(f"""
 # --- PŘIHLAŠOVÁNÍ (Levý panel) ---
 credentials = st.secrets["credentials"].to_dict()
 
-# vezmi hodnotu ještě před vykreslením widgetu (když ještě neexistuje, default True)
+# Zjistíme stav checkboxu z paměti (výchozí je True)
 remember_me = st.session_state.get("remember_checkbox", True)
 expiry_days = 30 if remember_me else 1
 
@@ -605,37 +605,25 @@ authenticator = stauth.Authenticate(
     expiry_days
 )
 
-# 1) nejdřív vykresli login form
+# Vykreslení přihlašovacího formuláře (Jméno, Heslo, tlačítko Login)
 authenticator.login(location="sidebar")
 
-# 2) checkbox vykresli až potom, ale vytáhni ho CSSkem pod password
-def _remember_changed():
-    st.session_state["_remember_changed"] = True
-
+# Vykreslení checkboxu přirozeně HNED POD přihlašovacím formulářem
 if not st.session_state.get("authentication_status"):
-    st.markdown("""
-    <style>
-    /* checkbox v sidebaru vytáhni mezi Password a Login */
-    [data-testid="stSidebar"] [data-testid="stCheckbox"]{
-        margin-top: -96px;   /* typicky -80 až -110 */
-        margin-bottom: 18px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    st.sidebar.checkbox("Zapamatovat si mě", value=True, key="remember_checkbox", on_change=_remember_changed)
-
-    # když uživatel přepne checkbox, přepočítej expiry_days (Authenticate se musí vytvořit znovu)
+    def _remember_changed():
+        st.session_state["_remember_changed"] = True
+        
+    st.sidebar.checkbox("☑️ Zapamatovat si mě (30 dní)", value=True, key="remember_checkbox", on_change=_remember_changed)
+    
     if st.session_state.pop("_remember_changed", False):
         st.rerun()
 
-# zbytek beze změny
-if st.session_state["authentication_status"]:
+if st.session_state.get("authentication_status"):
     authenticator.logout("Odhlásit se", location="sidebar")
     st.sidebar.success(f'Přihlášen jako: **{st.session_state["name"]}**')
-elif st.session_state["authentication_status"] is False:
+elif st.session_state.get("authentication_status") is False:
     st.sidebar.error('Špatné uživatelské jméno nebo heslo')
-elif st.session_state["authentication_status"] is None:
+elif st.session_state.get("authentication_status") is None:
     st.sidebar.warning('Pro zápis výsledků se přihlas')
 
 def bar(text: str):
