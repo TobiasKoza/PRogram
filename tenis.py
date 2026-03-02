@@ -594,30 +594,19 @@ st.markdown(f"""
 # --- PŘIHLAŠOVÁNÍ (Levý panel) ---
 credentials = st.secrets["credentials"].to_dict()
 
-# Zjistíme stav checkboxu z paměti (výchozí je True)
-remember_me = st.session_state.get("remember_checkbox", True)
-expiry_days = 30 if remember_me else 1
-
+# Inicializace přihlášení s fixní hodnotou 30 dní
+# Tímto odpadají veškeré chyby s mizející cookie při stisku F5
 authenticator = stauth.Authenticate(
     credentials,
     st.secrets["cookie"]["name"],
     st.secrets["cookie"]["key"],
-    expiry_days
+    30  # Natvrdo nastaveno 30 dní platnosti (přežije F5 i zavření prohlížeče)
 )
 
 # Vykreslení přihlašovacího formuláře (Jméno, Heslo, tlačítko Login)
 authenticator.login(location="sidebar")
 
-# Vykreslení checkboxu přirozeně HNED POD přihlašovacím formulářem
-if not st.session_state.get("authentication_status"):
-    def _remember_changed():
-        st.session_state["_remember_changed"] = True
-        
-    st.sidebar.checkbox("☑️ Zapamatovat si mě (30 dní)", value=True, key="remember_checkbox", on_change=_remember_changed)
-    
-    if st.session_state.pop("_remember_changed", False):
-        st.rerun()
-
+# Zpracování stavu
 if st.session_state.get("authentication_status"):
     authenticator.logout("Odhlásit se", location="sidebar")
     st.sidebar.success(f'Přihlášen jako: **{st.session_state["name"]}**')
