@@ -494,7 +494,7 @@ def compute_player_stats_cached(df: pd.DataFrame, current_user: str):
             elif is_loss:
                 doubles_opponents[opp_key]["l"] += 1
 
-    def build_stat_df(stat_dict, col_name):
+    def build_stat_df(stat_dict, col_name, sort_by="games"):
         rows = []
         for k, v in stat_dict.items():
             g = v["w"] + v["l"]
@@ -504,17 +504,30 @@ def compute_player_stats_cached(df: pd.DataFrame, current_user: str):
                 "Zápasů": g,
                 "Výhry": v["w"],
                 "Prohry": v["l"],
+                "__pct": pct,  # Skrytý sloupec pro matematické řazení
                 "Úspěšnost": f"{pct:.1f} %".replace('.', ',')
             })
+            
         if not rows:
             return pd.DataFrame(columns=[col_name, "Zápasů", "Výhry", "Prohry", "Úspěšnost"])
-        return pd.DataFrame(rows).sort_values("Zápasů", ascending=False).reset_index(drop=True)
+            
+        df = pd.DataFrame(rows)
+        
+        if sort_by == "pct":
+            # Dvouhra: Primárně % úspěšnosti, sekundárně počet zápasů
+            df = df.sort_values(["__pct", "Zápasů"], ascending=[False, False])
+        else:
+            # Čtyřhra: Primárně počet zápasů, sekundárně % úspěšnosti
+            df = df.sort_values(["Zápasů", "__pct"], ascending=[False, False])
+            
+        # Odstraníme skrytý sloupec před vykreslením
+        return df.drop(columns=["__pct"]).reset_index(drop=True)
 
-    df_singles = build_stat_df(singles_opponents, "Soupeř (Singles)")
-    df_d_partners = build_stat_df(doubles_partners, "Parťák (Doubles)")
-    df_d_opponents = build_stat_df(doubles_opponents, "Soupeři (Doubles)")
+    # Tady je definované to nové řazení
+    df_singles = build_stat_df(singles_opponents, "Soupeř (Singles)", sort_by="pct")
+    df_d_partners = build_stat_df(doubles_partners, "Parťák (Doubles)", sort_by="games")
+    df_d_opponents = build_stat_df(doubles_opponents, "Soupeři (Doubles)", sort_by="games")
 
-    # VRACÍME POUZE DATA (tabulky a slovníky), NE FUNKCE!
     return (
         df_singles,
         df_d_partners,
