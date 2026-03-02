@@ -435,7 +435,119 @@ def get_last_matches(df: pd.DataFrame, n: int = 5) -> pd.DataFrame:
 
     return out
 
+@st.cache_data(ttl=600)
+def compute_player_stats_cached(df: pd.DataFrame, current_user: str):
+    """
+    Vrátí hotové tabulky + pomocné struktury pro Tab 'Statistika hráče'.
+    Cache se invaliduje automaticky, když se změní df (Streamlit si ho hashne).
+    """
 
+    # Pomocná funkce pro parsování hráčů
+    def get_players(team_str):
+        return [p.strip() for p in str(team_str).split("+") if p.strip()]
+
+    MATCH_TYPES = {"singles", "doubles", "friendly_singles", "friendly_doubles"}
+
+    # Získání celkových statistik hráče (pro H2H porovnání)
+    def get_player_season_stats(player_name):
+        w, l = 0, 0
+        for _, r in df.iterrows():
+            if r["type"] not in MATCH_TYPES:
+                continue
+            ta = get_players(r["team_a"])
+            tb = get_players(r["team_b"])
+            if player_name in ta:
+                if r["winner"] == "A":
+                    w += 1
+                elif r["winner"] == "B":
+                    l += 1
+            elif player_name in tb:
+                if r["winner"] == "B":
+                    w += 1
+                elif r["winner"] == "A":
+                    l += 1
+        return w, l
+
+    singles_opponents = {}
+    doubles_partners = {}
+    doubles_opponents = {}
+
+    for _, r in df.iterrows():
+        if r["type"] not in MATCH_TYPES:
+            continue
+
+        ta = get_players(r["team_a"])
+        tb = get_players(r["team_b"])
+        win = r["winner"]
+
+        if current_user not in ta and current_user not in tb:
+            continue
+
+        my_team = ta if current_user in ta else tb
+        opp_team = tb if current_user in ta else ta
+
+        is_win = (current_user in ta and win == "A") or (current_user in tb and win == "B")
+        is_loss = (current_user in ta and win == "B") or (current_user in tb and win == "A")
+
+        # Singles
+        if "singles" in r["type"] and len(my_team) == 1 and len(opp_team) == 1:
+            opp = opp_team[0]
+            if opp not in singles_opponents:
+                singles_opponents[opp] = {"w": 0, "l": 0}
+            if is_win:
+                singles_opponents[opp]["w"] += 1
+            elif is_loss:
+                singles_opponents[opp]["l"] += 1
+
+        # Doubles
+        if "doubles" in r["type"] and len(my_team) == 2 and len(opp_team) == 2:
+            partner = my_team[0] if my_team[1] == current_user else my_team[1]
+            if partner not in doubles_partners:
+                doubles_partners[partner] = {"w": 0, "l": 0}
+            if is_win:
+                doubles_partners[partner]["w"] += 1
+            elif is_loss:
+                doubles_partners[partner]["l"] += 1
+
+            opp_key = f"{opp_team[0]} + {opp_team[1]}"
+            if opp_key not in doubles_opponents:
+                doubles_opponents[opp_key] = {"w": 0, "l": 0}
+            if is_win:
+                doubles_opponents[opp_key]["w"] += 1
+            elif is_loss:
+                doubles_opponents[opp_key]["l"] += 1
+
+    def build_stat_df(stat_dict, col_name):
+        rows = []
+        for k, v in stat_dict.items():
+            g = v["w"] + v["l"]
+            pct = (v["w"] / g * 100) if g > 0 else 0
+            rows.append({
+                col_name: k,
+                "Zápasů": g,
+                "Výhry": v["w"],
+                "Prohry": v["l"],
+                "Úspěšnost": f"{pct:.1f} %".replace('.', ',')
+            })
+        if not rows:
+            return pd.DataFrame(columns=[col_name, "Zápasů", "Výhry", "Prohry", "Úspěšnost"])
+        return pd.DataFrame(rows).sort_values("Zápasů", ascending=False).reset_index(drop=True)
+
+    df_singles = build_stat_df(singles_opponents, "Soupeř (Singles)")
+    df_d_partners = build_stat_df(doubles_partners, "Parťák (Doubles)")
+    df_d_opponents = build_stat_df(doubles_opponents, "Soupeři (Doubles)")
+
+    return (
+        df_singles,
+        df_d_partners,
+        df_d_opponents,
+        singles_opponents,
+        doubles_partners,
+        doubles_opponents,
+        get_player_season_stats,
+        get_players,
+        MATCH_TYPES,
+    )
 
 
 # --- UI STREAMLIT ---
@@ -1059,85 +1171,19 @@ with tab_stats:
         current_user = st.session_state.get("name")
         bar(f"Statistiky hráče: {current_user}")
         
-        df_all = DF_ALL.copy()
+        df_all = DF_ALL
         
-        # Pomocná funkce pro parsování hráčů
-        def get_players(team_str):
-            return [p.strip() for p in str(team_str).split("+") if p.strip()]
-
-        # Získání celkových statistik hráče (pro H2H porovnání)
-        def get_player_season_stats(player_name):
-            w, l = 0, 0
-            for _, r in df_all.iterrows():
-                if r["type"] not in ["singles", "doubles", "friendly_singles", "friendly_doubles"]: continue
-                ta = get_players(r["team_a"])
-                tb = get_players(r["team_b"])
-                if player_name in ta:
-                    if r["winner"] == "A": w += 1
-                    elif r["winner"] == "B": l += 1
-                elif player_name in tb:
-                    if r["winner"] == "B": w += 1
-                    elif r["winner"] == "A": l += 1
-            return w, l
-
-        # Data pro tabulky
-        singles_opponents = {}
-        doubles_partners = {}
-        doubles_opponents = {}
-
-        for _, r in df_all.iterrows():
-            ta = get_players(r["team_a"])
-            tb = get_players(r["team_b"])
-            win = r["winner"]
-            
-            # Je current_user vůbec v zápase?
-            if current_user not in ta and current_user not in tb:
-                continue
-
-            my_team = ta if current_user in ta else tb
-            opp_team = tb if current_user in ta else ta
-            is_win = (current_user in ta and win == "A") or (current_user in tb and win == "B")
-            is_loss = (current_user in ta and win == "B") or (current_user in tb and win == "A")
-
-            # Singles
-            if "singles" in r["type"] and len(my_team) == 1 and len(opp_team) == 1:
-                opp = opp_team[0]
-                if opp not in singles_opponents: singles_opponents[opp] = {"w": 0, "l": 0}
-                if is_win: singles_opponents[opp]["w"] += 1
-                elif is_loss: singles_opponents[opp]["l"] += 1
-
-            # Doubles
-            if "doubles" in r["type"] and len(my_team) == 2 and len(opp_team) == 2:
-                # Parťák
-                partner = my_team[0] if my_team[1] == current_user else my_team[1]
-                if partner not in doubles_partners: doubles_partners[partner] = {"w": 0, "l": 0}
-                if is_win: doubles_partners[partner]["w"] += 1
-                elif is_loss: doubles_partners[partner]["l"] += 1
-                
-                # Soupeři
-                opp_key = f"{opp_team[0]} + {opp_team[1]}"
-                if opp_key not in doubles_opponents: doubles_opponents[opp_key] = {"w": 0, "l": 0}
-                if is_win: doubles_opponents[opp_key]["w"] += 1
-                elif is_loss: doubles_opponents[opp_key]["l"] += 1
-
-        # Generování DataFrame z dict
-        def build_stat_df(stat_dict, col_name):
-            rows = []
-            for k, v in stat_dict.items():
-                g = v["w"] + v["l"]
-                pct = (v["w"] / g * 100) if g > 0 else 0
-                rows.append({
-                    col_name: k,
-                    "Zápasů": g,
-                    "Výhry": v["w"],
-                    "Prohry": v["l"],
-                    "Úspěšnost": f"{pct:.1f} %".replace('.', ',')
-                })
-            return pd.DataFrame(rows).sort_values("Zápasů", ascending=False).reset_index(drop=True)
-
-        df_singles = build_stat_df(singles_opponents, "Soupeř (Singles)")
-        df_d_partners = build_stat_df(doubles_partners, "Parťák (Doubles)")
-        df_d_opponents = build_stat_df(doubles_opponents, "Soupeři (Doubles)")
+        (
+            df_singles,
+            df_d_partners,
+            df_d_opponents,
+            singles_opponents,
+            doubles_partners,
+            doubles_opponents,
+            get_player_season_stats,
+            get_players,
+            MATCH_TYPES,
+        ) = compute_player_stats_cached(df_all, current_user)
 
         # Vykreslení horních tabulek
         c1, c2, c3 = st.columns(3)
@@ -1573,10 +1619,7 @@ with tab2:
         st.warning("⚠️ Pro zadávání nových zápasů, přidávání hráčů a úpravu ELO se musíš přihlásit v levém panelu.")
         st.info("Bez přihlášení je možné pouze prohlížet žebříčky a historii.")
 
-# --- TAB 3: HISTORIE ---
 
-# --- TAB 3: HISTORIE ---
-# --- TAB 3: HISTORIE ---
 # --- TAB 3: HISTORIE ---
 with tab3:
     bar("Kompletní historie zápasů")
