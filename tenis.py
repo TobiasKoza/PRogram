@@ -615,7 +615,7 @@ authenticator.login(location="sidebar")
 
 # Náš checkbox vykreslíme až POD formulářem (pod tlačítkem Login)
 if not st.session_state.get("authentication_status"):
-    st.sidebar.checkbox("☑️ Zapamatovat si mě (30 dní)", value=True, key="remember_checkbox")
+    st.sidebar.checkbox("Zapamatovat si mě", value=True, key="remember_checkbox")
 
 if st.session_state["authentication_status"]:
     authenticator.logout("Odhlásit se", location="sidebar")
