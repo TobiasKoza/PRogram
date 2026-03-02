@@ -1354,10 +1354,10 @@ with tab_stats:
                 
                 html_d_h2h = f"""
 <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); margin-top: 10px;">
-    <h3 style="text-align: center; margin-top: 0;">Vzájemné zápasy: My 🆚 Soupeři</h3>
+    <h3 style="text-align: center; margin-top: 0;">Vzájemné zápasy celkem</h3>
     <div style="display: flex; justify-content: space-between; text-align: center; margin-top: 20px;">
         <div style="width: 30%;">
-            <h4 style="color: #3498db; margin-bottom: 5px;">My ({current_user}+{selected_partner})</h4>
+            <h4 style="color: #3498db; margin-bottom: 5px;">{current_user} & {selected_partner}</h4>
             <p style="margin:5px 0;"><b>{h2h_d_g}</b></p>
             <p style="margin:5px 0; color: #2ecc71;">{h2h_d_w}</p>
             <p style="margin:5px 0; color: #e74c3c;">{h2h_d_l}</p>
@@ -1371,7 +1371,7 @@ with tab_stats:
             <p style="margin:5px 0; color: gray;">Úspěšnost</p>
         </div>
         <div style="width: 30%;">
-            <h4 style="color: #e67e22; margin-bottom: 5px;">Soupeři ({selected_d_opp})</h4>
+            <h4 style="color: #e67e22; margin-bottom: 5px;">{selected_d_opp.replace(' + ', ' & ')}</h4>
             <p style="margin:5px 0;"><b>{h2h_d_g}</b></p>
             <p style="margin:5px 0; color: #2ecc71;">{h2h_d_l}</p>
             <p style="margin:5px 0; color: #e74c3c;">{h2h_d_w}</p>
