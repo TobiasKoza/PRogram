@@ -592,14 +592,9 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # --- PŘIHLAŠOVÁNÍ (Levý panel) ---
-# Tato úprava zajistí, že si knihovna může do dat zapisovat (resetovat pokusy atd.)
 credentials = st.secrets["credentials"].to_dict()
 
-# Vykreslíme checkbox NAD formulářem (pokud není přihlášen)
-if not st.session_state.get("authentication_status"):
-    st.sidebar.checkbox("Zapamatovat si mě", value=True, key="remember_checkbox")
-
-# Nastavení expirace cookie podle checkboxu
+# vezmi hodnotu ještě před vykreslením widgetu (když ještě neexistuje, default True)
 remember_me = st.session_state.get("remember_checkbox", True)
 expiry_days = 30 if remember_me else 1
 
@@ -610,9 +605,31 @@ authenticator = stauth.Authenticate(
     expiry_days
 )
 
-# Vykreslení přihlašovacího formuláře POD checkboxem
+# 1) nejdřív vykresli login form
 authenticator.login(location="sidebar")
 
+# 2) checkbox vykresli až potom, ale vytáhni ho CSSkem pod password
+def _remember_changed():
+    st.session_state["_remember_changed"] = True
+
+if not st.session_state.get("authentication_status"):
+    st.markdown("""
+    <style>
+      /* posune JEDINÝ checkbox v sidebaru nahoru (pod password pole) */
+      [data-testid="stSidebar"] [data-testid="stCheckbox"]{
+        margin-top: -58px;   /* doladíš podle potřeby: -48 až -70 */
+        margin-bottom: 8px;
+      }
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.sidebar.checkbox("Zapamatovat si mě", value=True, key="remember_checkbox", on_change=_remember_changed)
+
+    # když uživatel přepne checkbox, přepočítej expiry_days (Authenticate se musí vytvořit znovu)
+    if st.session_state.pop("_remember_changed", False):
+        st.rerun()
+
+# zbytek beze změny
 if st.session_state["authentication_status"]:
     authenticator.logout("Odhlásit se", location="sidebar")
     st.sidebar.success(f'Přihlášen jako: **{st.session_state["name"]}**')
@@ -620,7 +637,6 @@ elif st.session_state["authentication_status"] is False:
     st.sidebar.error('Špatné uživatelské jméno nebo heslo')
 elif st.session_state["authentication_status"] is None:
     st.sidebar.warning('Pro zápis výsledků se přihlas')
-
 
 def bar(text: str):
     st.markdown(f'<div class="section-bar">{text}</div>', unsafe_allow_html=True)
