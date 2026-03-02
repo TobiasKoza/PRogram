@@ -595,13 +595,13 @@ st.markdown(f"""
 # Tato úprava zajistí, že si knihovna může do dat zapisovat (resetovat pokusy atd.)
 credentials = st.secrets["credentials"].to_dict()
 
-# Zjistíme stav checkboxu z paměti ještě dříve, než ho na stránce vykreslíme (výchozí je True)
-remember_me = st.session_state.get("remember_checkbox", True)
-
+# Vykreslíme checkbox NAD formulářem (pokud není přihlášen)
 if not st.session_state.get("authentication_status"):
-    expiry_days = 30 if remember_me else 1
-else:
-    expiry_days = 30
+    st.sidebar.checkbox("Zapamatovat si mě", value=True, key="remember_checkbox")
+
+# Nastavení expirace cookie podle checkboxu
+remember_me = st.session_state.get("remember_checkbox", True)
+expiry_days = 30 if remember_me else 1
 
 authenticator = stauth.Authenticate(
     credentials,
@@ -610,12 +610,8 @@ authenticator = stauth.Authenticate(
     expiry_days
 )
 
-# Vykreslení samotného přihlašovacího formuláře (Jméno, Heslo, tlačítko Login) JEDNOU
+# Vykreslení přihlašovacího formuláře POD checkboxem
 authenticator.login(location="sidebar")
-
-# Náš checkbox vykreslíme až POD formulářem (pod tlačítkem Login)
-if not st.session_state.get("authentication_status"):
-    st.sidebar.checkbox("Zapamatovat si mě", value=True, key="remember_checkbox")
 
 if st.session_state["authentication_status"]:
     authenticator.logout("Odhlásit se", location="sidebar")
