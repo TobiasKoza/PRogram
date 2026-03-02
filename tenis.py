@@ -595,22 +595,35 @@ st.markdown(f"""
 # Tato úprava zajistí, že si knihovna může do dat zapisovat (resetovat pokusy atd.)
 credentials = st.secrets["credentials"].to_dict()
 
-# Trik: Zobrazíme checkbox nad formulářem POUZE pokud hráč není přihlášen
+# Zjistíme stav checkboxu z paměti ještě dříve, než ho na stránce vykreslíme (výchozí je True)
+remember_me = st.session_state.get("remember_checkbox", True)
+
 if not st.session_state.get("authentication_status"):
-    st.sidebar.markdown("<br>", unsafe_allow_html=True) # Malá mezera seshora
-    remember_me = st.sidebar.checkbox("☑️ Zapamatovat si mě (30 dní)", value=True)
-    # Pokud zaškrtne, cookie vydrží 30 dní. Pokud ne, vyprší za 1 den.
     expiry_days = 30 if remember_me else 1
 else:
-    # Pokud už je přihlášený (pro zobrazení tlačítka odhlásit)
-    expiry_days = 30 
+    expiry_days = 30
 
 authenticator = stauth.Authenticate(
     credentials,
     st.secrets["cookie"]["name"],
     st.secrets["cookie"]["key"],
-    expiry_days  # Zde použijeme naši dynamickou dobu expirace
+    expiry_days
 )
+
+# Vykreslení samotného přihlašovacího formuláře (Jméno, Heslo, tlačítko Login)
+authenticator.login(location="sidebar")
+
+# Náš checkbox vykreslíme až POD formulářem (pod tlačítkem Login)
+if not st.session_state.get("authentication_status"):
+    st.sidebar.checkbox("☑️ Zapamatovat si mě (30 dní)", value=True, key="remember_checkbox")
+
+if st.session_state["authentication_status"]:
+    authenticator.logout("Odhlásit se", location="sidebar")
+    st.sidebar.success(f'Přihlášen jako: **{st.session_state["name"]}**')
+elif st.session_state["authentication_status"] is False:
+    st.sidebar.error('Špatné uživatelské jméno nebo heslo')
+elif st.session_state["authentication_status"] is None:
+    st.sidebar.warning('Pro zápis výsledků se přihlas')
 
 authenticator.login(location="sidebar")
 
