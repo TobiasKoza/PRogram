@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import streamlit as st
 import streamlit_authenticator as stauth 
 import base64
+import calendar
 
 
 SHEET_NAME = "tennis_elo_template"
@@ -537,7 +538,48 @@ def compute_player_stats_cached(df: pd.DataFrame, current_user: str):
         doubles_opponents
     )
 
+def render_player_calendar(player_dates):
+    today = datetime.now().date()
+    cal = calendar.Calendar(firstweekday=0)
+    month_days = cal.monthdatescalendar(today.year, today.month)
+    month_name = ["Leden", "Únor", "Březen", "Duben", "Květen", "Červen", "Červenec", "Srpen", "Září", "Říjen", "Listopad", "Prosinec"][today.month-1]
 
+    html = f'<div style="text-align:center; margin-bottom:10px; font-weight:bold; color:gray;">{month_name} {today.year}</div>'
+    html += '<div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; max-width: 250px; margin: auto;">'
+    
+    # Hlavička dnů
+    for day in ["Po", "Út", "St", "Čt", "Pá", "So", "Ne"]:
+        html += f'<div style="font-size: 10px; color: gray; text-align: center;">{day}</div>'
+
+    for week in month_days:
+        for day in week:
+            is_match = day in player_dates
+            is_today = day == today
+            current_month = day.month == today.month
+            
+            # Styl buňky
+            bg = "rgba(46, 204, 113, 0.4)" if is_match else "rgba(255,255,255,0.05)"
+            border = "1px solid #2ecc71" if is_match else "1px solid rgba(255,255,255,0.1)"
+            opacity = "1" if current_month else "0.2"
+            color = "white" if current_month else "gray"
+            circle = 'border-radius: 50%;' if is_match else 'border-radius: 4px;'
+            
+            html += f'''
+            <div style="
+                aspect-ratio: 1/1; 
+                display: flex; 
+                align-items: center; 
+                justify-content: center; 
+                font-size: 12px; 
+                background: {bg}; 
+                border: {border}; 
+                {circle}
+                color: {color};
+                opacity: {opacity};
+                { "box-shadow: 0 0 5px #fff;" if is_today else "" }
+            ">{day.day}</div>'''
+    html += '</div>'
+    return html
 # --- UI STREAMLIT ---
 st.set_page_config(page_title="Tennis ELO Žebříček", page_icon="🎾", layout="wide")
 # --- NOVÝ OPRAVENÝ BLOK NADPISU ---
@@ -850,31 +892,36 @@ with tab1:
         parts.append("<tr>")
         for c in cols:
             v = row.get(c, "")
+            row_style = 'color: rgba(255,255,255,0.55); background-color: rgba(255,255,255,0.03);' if is_unranked else ""
 
-            # barvení Δ sloupce
+            # 1. Barvení sloupce "Poslední zápas" (zelená, žlutá, červená)
+            if c == "Poslední zápas":
+                d_obj = _parse_date(str(v))
+                d_color = ""
+                if d_obj:
+                    days_ago = (today - d_obj).days
+                    if days_ago <= 10: d_color = "color: #2ecc71; font-weight: 700;"    # Zelená
+                    elif days_ago <= 20: d_color = "color: #f1c40f; font-weight: 700;"  # Žlutá
+                    elif days_ago <= 30: d_color = "color: #e74c3c; font-weight: 700;"  # Červená
+                
+                parts.append(f'<td style="{row_style}{d_color}">{_esc(v)}</td>')
+                continue
+
+            # 2. Barvení Δ sloupce (původní logika)
             if c == DELTA_COL:
                 s = str(v).strip()
                 style = ""
                 try:
                     main = s.split("(", 1)[0].strip()
                     n = float(main.replace("+", "").replace("−", "-"))
-                    if n > 0:
-                        style = "color: #2ecc71; font-weight: 700;"
-                    elif n < 0:
-                        style = "color: #e74c3c; font-weight: 700;"
-                except:
-                    style = ""
-
-                # unranked = šedé pozadí
-                row_style = 'color: rgba(255,255,255,0.55); background-color: rgba(255,255,255,0.03);' if is_unranked else ""
+                    if n > 0: style = "color: #2ecc71; font-weight: 700;"
+                    elif n < 0: style = "color: #e74c3c; font-weight: 700;"
+                except: style = ""
                 parts.append(f'<td style="{row_style}{style}">{_esc(v)}</td>')
                 continue
 
-            # unranked = šedé pozadí (všechny sloupce)
-            if is_unranked:
-                parts.append(f'<td style="color: rgba(255,255,255,0.55); background-color: rgba(255,255,255,0.03);">{_esc(v)}</td>')
-            else:
-                parts.append(f"<td>{_esc(v)}</td>")
+            # Ostatní sloupce
+            parts.append(f'<td style="{row_style}">{_esc(v)}</td>')
 
         parts.append("</tr>")
     parts.append("</tbody></table></div>")
@@ -1160,7 +1207,25 @@ with tab_stats:
     else:
         current_user = st.session_state.get("name")
         bar(f"Statistiky hráče: {current_user}")
+        # Výpočet dat zápasů pro kalendář
+        p_dates = []
+        for _, r in df_all.iterrows():
+            if current_user in get_players(r["team_a"]) or current_user in get_players(r["team_b"]):
+                d_obj = parse_ddmmyyyy(r["date"])
+                if d_obj: p_dates.append(d_obj)
         
+        # Vykreslení kalendáře a info boxu
+        col_cal, col_info = st.columns([1, 3])
+        with col_cal:
+            st.markdown(render_player_calendar(set(p_dates)), unsafe_allow_html=True)
+        with col_info:
+            st.markdown(f"""
+                <div style="padding: 10px; color: gray; font-size: 14px;">
+                    Tento měsíc jsi odehrál <b>{len([d for d in p_dates if d.month == datetime.now().month])}</b> zápasů.<br>
+                    Zelená kolečka v kalendáři značí dny, kdy jsi byl na kurtu.
+                </div>
+            """, unsafe_allow_html=True)
+        st.write("")
         df_all = DF_ALL
         
         # --- POMOCNÉ FUNKCE (přesunuty sem z cache) ---
