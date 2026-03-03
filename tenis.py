@@ -1240,21 +1240,9 @@ with tab_stats:
             st.session_state.cal_month = datetime.now().month
             st.session_state.cal_year = datetime.now().year
 
-        col_nav1, col_nav2, col_nav3 = st.columns([1, 2, 1])
-        with col_nav1:
-            if st.button("⬅️", use_container_width=True):
-                st.session_state.cal_month -= 1
-                if st.session_state.cal_month < 1:
-                    st.session_state.cal_month = 12
-                    st.session_state.cal_year -= 1
-                st.rerun()
-        with col_nav3:
-            if st.button("➡️", use_container_width=True):
-                st.session_state.cal_month += 1
-                if st.session_state.cal_month > 12:
-                    st.session_state.cal_month = 1
-                    st.session_state.cal_year += 1
-                st.rerun()
+
+
+
 
         # --- 3. VÝPOČET DAT PRO KALENDÁŘ ---
         p_dates = []
@@ -1266,6 +1254,39 @@ with tab_stats:
         # --- 4. VYKRESLENÍ KALENDÁŘE A ELO GRAFU ---
         col_cal, col_info = st.columns([1.2, 2])
         with col_cal:
+            st.markdown("""
+            <style>
+            #cal-nav div[data-testid="stButton"] > button{
+                padding: 2px 8px !important;
+                font-size: 12px !important;
+                line-height: 1 !important;
+                min-height: 0 !important;
+            }
+            #cal-nav div[data-testid="stButton"]{ margin: 0 !important; }
+            </style>
+            """, unsafe_allow_html=True)
+
+            st.markdown('<div id="cal-nav">', unsafe_allow_html=True)
+            nav_l, nav_mid, nav_r = st.columns([1, 6, 1])
+
+            with nav_l:
+                if st.button("◀", key="cal_prev"):
+                    st.session_state.cal_month -= 1
+                    if st.session_state.cal_month < 1:
+                        st.session_state.cal_month = 12
+                        st.session_state.cal_year -= 1
+                    st.rerun()
+
+            with nav_r:
+                if st.button("▶", key="cal_next"):
+                    st.session_state.cal_month += 1
+                    if st.session_state.cal_month > 12:
+                        st.session_state.cal_month = 1
+                        st.session_state.cal_year += 1
+                    st.rerun()
+
+            st.markdown("</div>", unsafe_allow_html=True)
+
             cal_html = render_player_calendar(set(p_dates), st.session_state.cal_year, st.session_state.cal_month)
             components.html(cal_html, height=320)
             
