@@ -1208,7 +1208,7 @@ with tab_stats:
         current_user = st.session_state.get("name")
         bar(f"Statistiky hráče: {current_user}")
 
-        # --- POMOCNÉ FUNKCE (přesunuty nahoru, aby se předešlo NameError) ---
+        # 1. POMOCNÉ FUNKCE (Musí být nahoře, aby nebyl NameError)
         def get_players(team_str):
             return [p.strip() for p in str(team_str).split("+") if p.strip()]
 
@@ -1226,70 +1226,41 @@ with tab_stats:
                     elif r["winner"] == "A": l += 1
             return w, l
 
-        # --- VÝPOČET DAT PRO KALENDÁŘ ---
+        # 2. VÝPOČET DAT PRO KALENDÁŘ
         p_dates = []
         for _, r in df_all.iterrows():
-            # Tady už get_players v pořádku proběhne
             if current_user in get_players(r["team_a"]) or current_user in get_players(r["team_b"]):
                 d_obj = parse_ddmmyyyy(r["date"])
                 if d_obj: p_dates.append(d_obj)
         
-        # Vykreslení kalendáře
-        col_cal, col_info = st.columns([1, 3])
+        # 3. VYKRESLENÍ KALENDÁŘE A ELO GRAFU
+        col_cal, col_info = st.columns([1, 2])
         with col_cal:
             st.markdown(render_player_calendar(set(p_dates)), unsafe_allow_html=True)
         with col_info:
+            count = len([d for d in p_dates if d.month == datetime.now().month])
+            word = "zápas" if count == 1 else ("zápasy" if 1 < count < 5 else "zápasů")
+            
             st.markdown(f"""
-                <div style="padding: 10px; color: gray; font-size: 14px;">
-                    Tento měsíc jsi odehrál <b>{len([d for d in p_dates if d.month == datetime.now().month])}</b> zápasů.<br>
-                    Zelená kolečka v kalendáři značí dny, kdy jsi byl na kurtu.
+                <div style="padding: 15px; color: rgba(255,255,255,0.8); font-size: 14px; background: rgba(255,255,255,0.03); border-radius: 12px; border-left: 4px solid #2ecc71;">
+                    Tento měsíc jsi odehrál <b>{count}</b> {word}.<br>
+                    <span style="font-size: 12px; opacity: 0.7;">Zelená kolečka v kalendáři značí dny, kdy jsi byl na kurtu.</span>
                 </div>
             """, unsafe_allow_html=True)
-        st.write("")
-        
-        # Vykreslení kalendáře a info boxu
-        col_cal, col_info = st.columns([1, 3])
-        with col_cal:
-            st.markdown(render_player_calendar(set(p_dates)), unsafe_allow_html=True)
-        with col_info:
-            st.markdown(f"""
-                <div style="padding: 10px; color: gray; font-size: 14px;">
-                    Tento měsíc jsi odehrál <b>{len([d for d in p_dates if d.month == datetime.now().month])}</b> zápasů.<br>
-                    Zelená kolečka v kalendáři značí dny, kdy jsi byl na kurtu.
-                </div>
-            """, unsafe_allow_html=True)
+            
+            # Graf vývoje ELO (akcie)
+            hist_df_for_graph = build_player_history(df_all, current_user)
+            if not hist_df_for_graph.empty:
+                graph_data = hist_df_for_graph.iloc[::-1].copy()
+                st.line_chart(graph_data.set_index("Datum")["ELO po"], color="#2ecc71", height=200)
+
         st.write("")
         df_all = DF_ALL
         
-        # --- POMOCNÉ FUNKCE (přesunuty sem z cache) ---
-        def get_players(team_str):
-            return [p.strip() for p in str(team_str).split("+") if p.strip()]
+        # 4. TABULKY STATISTIK (Z CACHE)
+        (df_singles, df_d_partners, df_d_opponents, singles_opponents, 
+         doubles_partners, doubles_opponents) = compute_player_stats_cached(df_all, current_user)
 
-        def get_player_season_stats(player_name):
-            w, l = 0, 0
-            for _, r in df_all.iterrows():
-                if r["type"] not in ["singles", "doubles", "friendly_singles", "friendly_doubles"]: continue
-                ta = get_players(r["team_a"])
-                tb = get_players(r["team_b"])
-                if player_name in ta:
-                    if r["winner"] == "A": w += 1
-                    elif r["winner"] == "B": l += 1
-                elif player_name in tb:
-                    if r["winner"] == "B": w += 1
-                    elif r["winner"] == "A": l += 1
-            return w, l
-        
-        # Rozbalení pouze dat z cache
-        (
-            df_singles,
-            df_d_partners,
-            df_d_opponents,
-            singles_opponents,
-            doubles_partners,
-            doubles_opponents,
-        ) = compute_player_stats_cached(df_all, current_user)
-
-        # Vykreslení horních tabulek
         c1, c2, c3 = st.columns(3)
         with c1:
             st.markdown("**🆚 Dvouhra (Proti)**")
@@ -1303,10 +1274,9 @@ with tab_stats:
 
         st.divider()
         
-# --- DETAILNÍ ROZBORY (VÝBĚR) ---
+        # 5. DETAILNÍ ROZBORY (H2H)
         st.subheader("🔍 Detailní rozbory (Dvouhra a Čtyřhra)")
         
-        # Logika pro vzájemné nulování roletek
         if "sel_opp" not in st.session_state: st.session_state.sel_opp = None
         if "sel_partner" not in st.session_state: st.session_state.sel_partner = None
         if "sel_d_opp" not in st.session_state: st.session_state.sel_d_opp = None
@@ -1320,16 +1290,14 @@ with tab_stats:
             st.session_state.sel_d_opp = None
         
         col_sel_s, col_sel_d = st.columns(2)
-        
         with col_sel_s:
-            all_opponents = sorted(list(singles_opponents.keys()))
-            st.selectbox("🎯 Detail soupeře (Dvouhra):", options=all_opponents, index=None, placeholder="— vyber soupeře —", key="sel_opp", on_change=on_opp_change)
-            
+            st.selectbox("🎯 Detail soupeře (Dvouhra):", options=sorted(list(singles_opponents.keys())), 
+                         index=None, placeholder="— vyber soupeře —", key="sel_opp", on_change=on_opp_change)
         with col_sel_d:
-            all_partners = sorted(list(doubles_partners.keys()))
-            st.selectbox("🤝 Detail parťáka (Čtyřhra):", options=all_partners, index=None, placeholder="— vyber parťáka —", key="sel_partner", on_change=on_partner_change)
+            st.selectbox("🤝 Detail parťáka (Čtyřhra):", options=sorted(list(doubles_partners.keys())), 
+                         index=None, placeholder="— vyber parťáka —", key="sel_partner", on_change=on_partner_change)
         
-        # --- VYKRESLENÍ DVOUHRY ---
+        # --- VYKRESLENÍ DETAILŮ DVOUHRY ---
         if st.session_state.sel_opp:
             selected_opp = st.session_state.sel_opp
             p1_w, p1_l = get_player_season_stats(current_user)
@@ -1427,7 +1395,7 @@ with tab_stats:
             else:
                 st.info("Nenalezena žádná detailní historie.")
 
-        # --- VYKRESLENÍ ČTYŘHRY (PARŤÁK A SOUPEŘI) ---
+        # --- VYKRESLENÍ DETAILŮ ČTYŘHRY ---
         if st.session_state.sel_partner:
             selected_partner = st.session_state.sel_partner
             part_w = doubles_partners[selected_partner]["w"]
@@ -1460,7 +1428,6 @@ with tab_stats:
 """
             st.markdown(html_d, unsafe_allow_html=True)
 
-            # Nejprve zjistíme všechny společné soupeře pro daný pár
             partner_matches = []
             opponents_set = set()
             
@@ -1468,18 +1435,15 @@ with tab_stats:
                 if "doubles" not in r["type"]: continue
                 ta = get_players(r["team_a"])
                 tb = get_players(r["team_b"])
-
                 we_are_ta = (current_user in ta and selected_partner in ta)
                 we_are_tb = (current_user in tb and selected_partner in tb)
 
                 if we_are_ta or we_are_tb:
                     opponents_list = tb if we_are_ta else ta
-                    opponents_str = " + ".join(sorted(opponents_list)) # Abecedně seřazeno pro jistotu
+                    opponents_str = " + ".join(sorted(opponents_list))
                     opponents_set.add(opponents_str)
-                    
                     is_win = (we_are_ta and r["winner"] == "A") or (we_are_tb and r["winner"] == "B")
                     sets_clean = str(r["sets"]).replace("'", "").strip()
-
                     partner_matches.append({
                         "Datum": r["date"],
                         "Soupeři": opponents_str,
@@ -1488,13 +1452,11 @@ with tab_stats:
                         "Sety": sets_clean
                     })
 
-            # Třetí roletka (výběr soupeřů)
             st.markdown("---")
             all_pair_opponents = sorted(list(opponents_set))
             selected_d_opp = st.selectbox("⚔️ Vyber soupeře pro Head-to-Head (Čtyřhra):", options=all_pair_opponents, index=None, placeholder="— všichni soupeři —", key="sel_d_opp")
             
             if selected_d_opp:
-                # Filtrace na konkrétní H2H ve čtyřhře
                 h2h_d_matches = [m for m in partner_matches if m["Soupeři"] == selected_d_opp]
                 h2h_d_w = sum(1 for m in h2h_d_matches if m["Výsledek"] == "Výhra")
                 h2h_d_l = sum(1 for m in h2h_d_matches if m["Výsledek"] == "Prohra")
@@ -1541,12 +1503,10 @@ with tab_stats:
 
             if display_matches:
                 df_pm = pd.DataFrame(display_matches).iloc[::-1]
-                
                 def highlight_winloss(val):
                     if val == 'Výhra': return 'color: #2ecc71; font-weight: bold;'
                     if val == 'Prohra': return 'color: #e74c3c; font-weight: bold;'
                     return ''
-                    
                 styled_pm = df_pm.style.map(highlight_winloss, subset=['Výsledek'])
                 st.dataframe(styled_pm, use_container_width=True, hide_index=True)
             else:
