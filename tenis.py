@@ -548,7 +548,8 @@ def compute_player_stats_cached(df: pd.DataFrame, current_user: str):
 
 import streamlit.components.v1 as components
 
-def render_player_calendar(player_dates, year, month):
+def render_player_calendar(match_details, year, month):
+    # match_details je slovník {datetime.date: "popis zápasů"}
     cal = calendar.Calendar(firstweekday=0)
     try:
         month_days = cal.monthdatescalendar(year, month)
@@ -560,16 +561,34 @@ def render_player_calendar(player_dates, year, month):
     today = datetime.now().date()
 
     html = []
+    html.append("""
+    <style>
+    .cal-grid { display:grid; grid-template-columns:repeat(7, 1fr); gap:5px; max-width:280px; margin:auto; font-family:sans-serif; }
+    .day-cell { 
+        aspect-ratio:1/1; display:flex; align-items:center; justify-content:center; 
+        font-size:12px; position: relative; cursor: default;
+    }
+    .tooltip {
+        visibility: hidden; width: 160px; background-color: rgba(0,0,0,0.95); color: #fff;
+        text-align: center; border-radius: 8px; padding: 8px; position: absolute;
+        z-index: 100; bottom: 125%; left: 50%; margin-left: -80px; opacity: 0;
+        transition: opacity 0.2s; border: 1px solid #2ecc71; font-size: 11px; line-height: 1.4;
+        pointer-events: none; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    }
+    .day-cell:hover .tooltip { visibility: visible; opacity: 1; }
+    </style>
+    """)
+
     html.append(f"<div style='text-align:center; margin-bottom:10px; font-weight:bold; color:#2ecc71; font-size:18px; font-family:sans-serif;'>{month_name} {year}</div>")
-    html.append("<div style='display:grid; grid-template-columns:repeat(7, 1fr); gap:5px; max-width:280px; margin:auto; font-family:sans-serif;'>")
+    html.append("<div class='cal-grid'>")
 
     for day_name in ["Po","Út","St","Čt","Pá","So","Ne"]:
         html.append(f"<div style='font-size:10px; color:gray; text-align:center;'>{day_name}</div>")
 
     for week in month_days:
         for day in week:
-            # Kontrola, zda hráč v tento den hrál
-            is_match = any(d == day for d in player_dates)
+            match_info = match_details.get(day)
+            is_match = match_info is not None
             is_today = (day == today)
             is_current_month = (day.month == month)
 
@@ -580,10 +599,12 @@ def render_player_calendar(player_dates, year, month):
             radius = "50%" if is_match else "4px"
             shadow = "box-shadow: 0 0 10px rgba(255,255,255,0.5);" if is_today else ""
 
+            tooltip_html = f"<span class='tooltip'>{match_info}</span>" if is_match else ""
+
             html.append(
-                f"<div style='aspect-ratio:1/1; display:flex; align-items:center; justify-content:center; "
-                f"font-size:12px; background:{bg}; border:{border}; border-radius:{radius}; "
-                f"color:{color}; opacity:{opacity}; {shadow}'>{day.day}</div>"
+                f"<div class='day-cell' style='background:{bg}; border:{border}; border-radius:{radius}; "
+                f"color:{color}; opacity:{opacity}; {shadow}'>"
+                f"{day.day}{tooltip_html}</div>"
             )
     html.append("</div>")
     return "".join(html)
