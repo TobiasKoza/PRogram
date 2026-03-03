@@ -1242,7 +1242,196 @@ with tab_stats:
         def get_players(team_str):
             return [p.strip() for p in str(team_str).split("+") if p.strip()]
 
-        def get_player_season_stats(player_
+        def get_player_season_stats(player_name, data):
+            w, l = 0, 0
+            for _, r in data.iterrows():
+                if r["type"] not in ["singles", "doubles", "friendly_singles", "friendly_doubles"]: continue
+                ta, tb = get_players(r["team_a"]), get_players(r["team_b"])
+                if player_name in ta:
+                    if r["winner"] == "A": w += 1
+                    elif r["winner"] == "B": l += 1
+                elif player_name in tb:
+                    if r["winner"] == "B": w += 1
+                    elif r["winner"] == "A": l += 1
+            return w, l
+
+        # --- 2. INICIALIZACE A NAVIGACE KALENDÁŘE ---
+        if "cal_month" not in st.session_state:
+            st.session_state.cal_month = datetime.now().month
+            st.session_state.cal_year = datetime.now().year
+
+        # --- 3. VÝPOČET DAT PRO KALENDÁŘ (S TOOLTIPY) ---
+        match_details = {}
+        all_match_dates = []
+        for _, r in DF_ALL.iterrows():
+            if r["type"] not in ["singles", "doubles", "friendly_singles", "friendly_doubles"]: continue
+            ta_list, tb_list = get_players(r["team_a"]), get_players(r["team_b"])
+            if current_user in ta_list or current_user in tb_list:
+                d_obj = parse_ddmmyyyy(r["date"])
+                if d_obj:
+                    all_match_dates.append(d_obj)
+                    # Sestavení popisku pro mini okenko
+                    txt = f"<b>{r['team_a']} vs {r['team_b']}</b><br>Skóre: {r['score']}"
+                    if d_obj in match_details:
+                        match_details[d_obj] += f"<hr style='margin:5px 0; border:0; border-top:1px solid rgba(255,255,255,0.2)'>{txt}"
+                    else:
+                        match_details[d_obj] = txt
+
+        # --- 4. VYKRESLENÍ KALENDÁŘE A ELO GRAFU ---
+        col_cal, col_info = st.columns([1.2, 2])
+        
+        with col_cal:
+            # Tlačítka pro změnu měsíce
+            c_nav1, c_nav2, c_nav3 = st.columns([1, 2, 1])
+            with c_nav1:
+                if st.button("⬅️", key="btn_prev_m"):
+                    st.session_state.cal_month -= 1
+                    if st.session_state.cal_month < 1:
+                        st.session_state.cal_month = 12
+                        st.session_state.cal_year -= 1
+                    st.rerun()
+            with c_nav3:
+                if st.button("➡️", key="btn_next_m"):
+                    st.session_state.cal_month += 1
+                    if st.session_state.cal_month > 12:
+                        st.session_state.cal_month = 1
+                        st.session_state.cal_year += 1
+                    st.rerun()
+            
+            cal_html = render_player_calendar(match_details, st.session_state.cal_year, st.session_state.cal_month)
+            components.html(cal_html, height=320)
+            
+        with col_info:
+            count = len([d for d in all_match_dates if d.month == st.session_state.cal_month and d.year == st.session_state.cal_year])
+            # Česká gramatika
+            word = "zápas" if count == 1 else ("zápasy" if 1 < count < 5 else "zápasů")
+            
+            st.markdown(f"""
+                <div style="padding: 15px; color: rgba(255,255,255,0.8); font-size: 14px; background: rgba(255,255,255,0.03); border-radius: 12px; border-left: 4px solid #2ecc71;">
+                    V měsíci {st.session_state.cal_month}/{st.session_state.cal_year} jsi odehrál <b>{count}</b> {word}.<br>
+                    <span style="font-size: 12px; opacity: 0.7;">Najeď myší na zelený den pro detail zápasu.</span>
+                </div>
+                <div style="height: 30px;"></div>
+            """, unsafe_allow_html=True)
+            
+            # Interaktivní ELO Graf (Plotly) s fixní osou
+            hist_df_graph = build_player_history(DF_ALL, current_user)
+            if not hist_df_graph.empty:
+                graph_data = hist_df_graph.iloc[::-1].copy()
+                min_elo, max_elo = graph_data["ELO po"].min(), graph_data["ELO po"].max()
+                
+                fig = px.line(graph_data, x="Datum", y="ELO po", markers=True, color_discrete_sequence=["#2ecc71"])
+                fig.update_layout(
+                    height=230, margin=dict(l=0, r=0, t=10, b=0),
+                    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                    yaxis_title=None, xaxis_title=None,
+                    yaxis_range=[min_elo - 10, max_elo + 10]
+                )
+                fig.update_xaxes(showgrid=False, color="gray", tickfont=dict(size=10))
+                fig.update_yaxes(showgrid=True, gridcolor="rgba(255,255,255,0.05)", color="gray", tickfont=dict(size=10))
+                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
+        st.write("")
+        # Načtení cache tabulek pro H2H
+        (df_singles, df_d_partners, df_d_opponents, singles_opponents, 
+         doubles_partners, doubles_opponents) = compute_player_stats_cached(DF_ALL, current_user)
+
+        # Horní přehledové tabulky
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.markdown("**🆚 Dvouhra (Proti)**")
+            st.dataframe(df_singles, use_container_width=True, hide_index=True)
+        with c2:
+            st.markdown("**🤝 Čtyřhra (Parťák)**")
+            st.dataframe(df_d_partners, use_container_width=True, hide_index=True)
+        with c3:
+            st.markdown("**⚔️ Čtyřhra (Proti)**")
+            st.dataframe(df_d_opponents, use_container_width=True, hide_index=True)
+
+        st.divider()
+        st.subheader("🔍 Detailní rozbory (H2H)")
+        
+        if "sel_opp" not in st.session_state: st.session_state.sel_opp = None
+        if "sel_partner" not in st.session_state: st.session_state.sel_partner = None
+        
+        col_sel_s, col_sel_d = st.columns(2)
+        with col_sel_s:
+            st.selectbox("🎯 Detail soupeře (Dvouhra):", options=sorted(list(singles_opponents.keys())), 
+                         index=None, placeholder="— vyber soupeře —", key="sel_opp")
+        with col_sel_d:
+            st.selectbox("🤝 Detail parťáka (Čtyřhra):", options=sorted(list(doubles_partners.keys())), 
+                         index=None, placeholder="— vyber parťáka —", key="sel_partner")
+        
+        # --- LOGIKA VZÁJEMNÝCH ZÁPASŮ (DVOUHRA) ---
+        if st.session_state.sel_opp:
+            selected_opp = st.session_state.sel_opp
+            p1_w, p1_l = get_player_season_stats(current_user, DF_ALL)
+            p2_w, p2_l = get_player_season_stats(selected_opp, DF_ALL)
+            h2h_w = singles_opponents[selected_opp]["w"]
+            h2h_l = singles_opponents[selected_opp]["l"]
+            h2h_g = h2h_w + h2h_l
+            
+            st.markdown(f"""
+            <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); margin-top: 10px;">
+                <h3 style="text-align: center; margin-top: 0;">Vzájemné zápasy: {current_user} vs {selected_opp}</h3>
+                <div style="display: flex; justify-content: space-between; text-align: center; margin-top: 20px;">
+                    <div style="width: 30%;"><p><b>{h2h_g}</b></p><p style="color: #2ecc71;">{h2h_w}</p><p style="color: #e74c3c;">{h2h_l}</p></div>
+                    <div style="width: 30%; color: gray;"><p>Zápasů</p><p>Výhry</p><p>Prohry</p></div>
+                    <div style="width: 30%;"><p><b>{h2h_g}</b></p><p style="color: #2ecc71;">{h2h_l}</p><p style="color: #e74c3c;">{h2h_w}</p></div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            h2h_matches = []
+            for _, r in DF_ALL.iterrows():
+                if "singles" not in r["type"]: continue
+                ta, tb = get_players(r["team_a"]), get_players(r["team_b"])
+                if (current_user in ta and selected_opp in tb) or (current_user in tb and selected_opp in ta):
+                    winner_name = ta[0] if r["winner"] == "A" else tb[0]
+                    h2h_matches.append({
+                        "Datum": r["date"], "Zápas": f"{ta[0]} vs {tb[0]}", "Vítěz": winner_name, 
+                        "Skóre": r["score"], "Sety": str(r["sets"]).replace("'", "")
+                    })
+            if h2h_matches:
+                df_h2h = pd.DataFrame(h2h_matches).iloc[::-1]
+                st.dataframe(df_h2h.style.map(lambda x: 'color: #2ecc71; font-weight: bold;' if x == current_user else ('color: #e74c3c; font-weight: bold;' if x == selected_opp else ''), subset=['Vítěz']), use_container_width=True, hide_index=True)
+
+        # --- LOGIKA VZÁJEMNÝCH ZÁPASŮ (ČTYŘHRA) ---
+        if st.session_state.sel_partner:
+            selected_partner = st.session_state.sel_partner
+            pw, pl = doubles_partners[selected_partner]["w"], doubles_partners[selected_partner]["l"]
+            
+            st.markdown(f"""
+            <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); margin-top: 10px;">
+                <h3 style="text-align: center; margin-top: 0; color: #f1c40f;">Společná bilance: {current_user} & {selected_partner}</h3>
+                <div style="display: flex; justify-content: space-around; text-align: center; margin-top: 20px;">
+                    <div><p style="margin:5px 0; color: gray;">Zápasů</p><p style="margin:5px 0; font-size: 20px;"><b>{pw+pl}</b></p></div>
+                    <div><p style="margin:5px 0; color: gray;">Výhry</p><p style="margin:5px 0; color: #2ecc71; font-size: 20px;"><b>{pw}</b></p></div>
+                    <div><p style="margin:5px 0; color: gray;">Prohry</p><p style="margin:5px 0; color: #e74c3c; font-size: 20px;"><b>{pl}</b></p></div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            partner_matches = []
+            opponents_set = set()
+            for _, r in DF_ALL.iterrows():
+                if "doubles" not in r["type"]: continue
+                ta, tb = get_players(r["team_a"]), get_players(r["team_b"])
+                we_ta, we_tb = (current_user in ta and selected_partner in ta), (current_user in tb and selected_partner in tb)
+                if we_ta or we_tb:
+                    opps_str = " + ".join(sorted(tb if we_ta else ta))
+                    opponents_set.add(opps_str)
+                    is_win = (we_ta and r["winner"] == "A") or (we_tb and r["winner"] == "B")
+                    partner_matches.append({
+                        "Datum": r["date"], "Soupeři": opps_str, "Výsledek": "Výhra" if is_win else "Prohra", 
+                        "Skóre": r["score"], "Sety": str(r["sets"]).replace("'", "")
+                    })
+            
+            st.markdown("---")
+            selected_d_opp = st.selectbox("⚔️ Head-to-Head proti dvojici:", options=sorted(list(opponents_set)), index=None, placeholder="— všichni soupeři —", key="h2h_d_opp")
+            display_m = [m for m in partner_matches if m["Soupeři"] == selected_d_opp] if selected_d_opp else partner_matches
+            if display_m:
+                st.dataframe(pd.DataFrame(display_m).iloc[::-1].style.map(lambda x: 'color: #2ecc71; font-weight: bold;' if x == 'Výhra' else ('color: #e74c3c; font-weight: bold;' if x == 'Prohra' else ''), subset=['Výsledek']), use_container_width=True, hide_index=True)
 
 # --- TAB 2: ZADÁNÍ ZÁPASU ---
 with tab2:
