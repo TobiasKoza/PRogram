@@ -1207,12 +1207,45 @@ with tab_stats:
     else:
         current_user = st.session_state.get("name")
         bar(f"Statistiky hráče: {current_user}")
-        # Výpočet dat zápasů pro kalendář
+
+        # --- POMOCNÉ FUNKCE (přesunuty nahoru, aby se předešlo NameError) ---
+        def get_players(team_str):
+            return [p.strip() for p in str(team_str).split("+") if p.strip()]
+
+        def get_player_season_stats(player_name):
+            w, l = 0, 0
+            for _, r in df_all.iterrows():
+                if r["type"] not in ["singles", "doubles", "friendly_singles", "friendly_doubles"]: continue
+                ta = get_players(r["team_a"])
+                tb = get_players(r["team_b"])
+                if player_name in ta:
+                    if r["winner"] == "A": w += 1
+                    elif r["winner"] == "B": l += 1
+                elif player_name in tb:
+                    if r["winner"] == "B": w += 1
+                    elif r["winner"] == "A": l += 1
+            return w, l
+
+        # --- VÝPOČET DAT PRO KALENDÁŘ ---
         p_dates = []
         for _, r in df_all.iterrows():
+            # Tady už get_players v pořádku proběhne
             if current_user in get_players(r["team_a"]) or current_user in get_players(r["team_b"]):
                 d_obj = parse_ddmmyyyy(r["date"])
                 if d_obj: p_dates.append(d_obj)
+        
+        # Vykreslení kalendáře
+        col_cal, col_info = st.columns([1, 3])
+        with col_cal:
+            st.markdown(render_player_calendar(set(p_dates)), unsafe_allow_html=True)
+        with col_info:
+            st.markdown(f"""
+                <div style="padding: 10px; color: gray; font-size: 14px;">
+                    Tento měsíc jsi odehrál <b>{len([d for d in p_dates if d.month == datetime.now().month])}</b> zápasů.<br>
+                    Zelená kolečka v kalendáři značí dny, kdy jsi byl na kurtu.
+                </div>
+            """, unsafe_allow_html=True)
+        st.write("")
         
         # Vykreslení kalendáře a info boxu
         col_cal, col_info = st.columns([1, 3])
