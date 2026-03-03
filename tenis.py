@@ -3,13 +3,13 @@ import os
 import math
 import gspread
 import streamlit as st
-from google.oauth2.service_account import Credentials
-from datetime import datetime, timedelta
-import streamlit_authenticator as stauth 
+import streamlit_authenticator as stauth
 import base64
 import calendar
 import plotly.express as px
 import streamlit.components.v1 as components
+from google.oauth2.service_account import Credentials
+from datetime import datetime, timedelta
 
 
 
@@ -53,7 +53,18 @@ INITIAL_RATINGS = {
 
 # --- FUNKCE PRO DATA ---
 COLUMNS = ["date", "type", "team_a", "team_b", "winner", "score", "sets", "reason", "author"]
+def get_players(team_str):
+    """Rozdělí řetězec týmu (např. 'Tobi+Kuba') na seznam jmen."""
+    return [p.strip() for p in str(team_str).split("+") if p.strip()]
 
+def parse_ddmmyyyy(s: str):
+    """Bezpečně převede text na datum."""
+    s = str(s or "").strip()
+    try:
+        return datetime.strptime(s, "%d.%m.%Y").date()
+    except:
+        return None
+    
 @st.cache_data(ttl=10)
 def load_data():
     ws = get_ws()
