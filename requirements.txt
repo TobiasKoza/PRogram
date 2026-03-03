@@ -1,5 +1,5 @@
 pandas
 gspread
 google-auth
-streamlit-authenticator
+streamlit-authenticator==0.3.4
 plotly
