@@ -1281,34 +1281,52 @@ with tab_stats:
         col_cal, col_info = st.columns([1.2, 2])
         
         with col_cal:
-            # Tlačítka pro změnu měsíce
-            c_nav1, c_nav2, c_nav3 = st.columns([1, 2, 1])
+            # Tlačítka pro změnu měsíce (elegantnější)
+            st.markdown("""
+                <style>
+                /* zúží a zjemní jen tyhle dvě šipky (nejde 100% cílit jen klíčem, tak to držíme lokálně velikostí) */
+                .cal-nav-wrap { display:flex; justify-content:space-between; align-items:center; margin: 2px 0 10px 0; }
+                </style>
+            """, unsafe_allow_html=True)
+
+            c_nav1, c_nav2, c_nav3 = st.columns([0.9, 4.2, 0.9], vertical_alignment="center")
+
             with c_nav1:
-                if st.button("⬅️", key="btn_prev_m"):
+                if st.button("‹", key="btn_prev_m", use_container_width=True, type="secondary"):
                     st.session_state.cal_month -= 1
                     if st.session_state.cal_month < 1:
                         st.session_state.cal_month = 12
                         st.session_state.cal_year -= 1
                     st.rerun()
+
+            with c_nav2:
+                # jen vycentrovaná mezera (nadpis měsíce je přímo v kalendáři)
+                st.write("")
+
             with c_nav3:
-                if st.button("➡️", key="btn_next_m"):
+                if st.button("›", key="btn_next_m", use_container_width=True, type="secondary"):
                     st.session_state.cal_month += 1
                     if st.session_state.cal_month > 12:
                         st.session_state.cal_month = 1
                         st.session_state.cal_year += 1
                     st.rerun()
-            
+
             cal_html = render_player_calendar(match_details, st.session_state.cal_year, st.session_state.cal_month)
             components.html(cal_html, height=320)
             
         with col_info:
             count = len([d for d in all_match_dates if d.month == st.session_state.cal_month and d.year == st.session_state.cal_year])
+
+            # názvy měsíců ve tvaru "v měsíci <...>"
+            month_loc_cz = ["lednu","únoru","březnu","dubnu","květnu","červnu","červenci","srpnu","září","říjnu","listopadu","prosinci"]
+            month_loc = month_loc_cz[st.session_state.cal_month - 1]
+
             # Česká gramatika
             word = "zápas" if count == 1 else ("zápasy" if 1 < count < 5 else "zápasů")
             
             st.markdown(f"""
                 <div style="padding: 15px; color: rgba(255,255,255,0.8); font-size: 14px; background: rgba(255,255,255,0.03); border-radius: 12px; border-left: 4px solid #2ecc71;">
-                    V měsíci {st.session_state.cal_month}/{st.session_state.cal_year} jsi odehrál <b>{count}</b> {word}.<br>
+                    V měsíci {month_loc} {st.session_state.cal_year} jsi odehrál <b>{count}</b> {word}.<br>
                     <span style="font-size: 12px; opacity: 0.7;">Najeď myší na zelený den pro detail zápasu.</span>
                 </div>
                 <div style="height: 30px;"></div>
