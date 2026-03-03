@@ -11,48 +11,7 @@ import streamlit.components.v1 as components
 from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta
 
-
-
-SHEET_NAME = "tennis_elo_template"
-WORKSHEET = "tennis_elo_template"
-KEYFILE = "teniselo-98a88e562ec1.json"
-
-@st.cache_resource
-def get_ws():
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive",
-    ]
-
-    creds = None
-    try:
-        if "gcp_service_account" in st.secrets:
-            creds = Credentials.from_service_account_info(
-                st.secrets["gcp_service_account"],
-                scopes=scopes
-            )
-    except Exception:
-        creds = None
-
-    if creds is None:
-        creds = Credentials.from_service_account_file(KEYFILE, scopes=scopes)
-
-    gc = gspread.authorize(creds)
-    sh = gc.open_by_url("https://docs.google.com/spreadsheets/d/18By2jSoHEXI1WLCBYh8YXnMaCtfPNM1GsruV-pfdsXI/edit")
-    return sh.sheet1
-# --- KONFIGURACE ---
-K_SINGLES = 24
-K_DOUBLES = 36
-SCALE = 400
-CSV_PATH = "tennis_elo_template.csv"
-
-INITIAL_RATINGS = {
-    "Tobi": 1200, "Kuba": 1100, "Jirka": 1040, 
-    "Kávič": 1040, "Ríša": 1030, "Novas": 1030
-}
-
-# --- FUNKCE PRO DATA ---
-COLUMNS = ["date", "type", "team_a", "team_b", "winner", "score", "sets", "reason", "author"]
+# --- GLOBÁLNÍ POMOCNÉ FUNKCE (Musí být nahoře) ---
 def get_players(team_str):
     """Rozdělí řetězec týmu (např. 'Tobi+Kuba') na seznam jmen."""
     return [p.strip() for p in str(team_str).split("+") if p.strip()]
@@ -64,6 +23,42 @@ def parse_ddmmyyyy(s: str):
         return datetime.strptime(s, "%d.%m.%Y").date()
     except:
         return None
+
+# --- KONFIGURACE ---
+SHEET_NAME = "tennis_elo_template"
+WORKSHEET = "tennis_elo_template"
+KEYFILE = "teniselo-98a88e562ec1.json"
+K_SINGLES = 24
+K_DOUBLES = 36
+SCALE = 400
+
+INITIAL_RATINGS = {
+    "Tobi": 1200, "Kuba": 1100, "Jirka": 1040, 
+    "Kávič": 1040, "Ríša": 1030, "Novas": 1030
+}
+
+COLUMNS = ["date", "type", "team_a", "team_b", "winner", "score", "sets", "reason", "author"]
+
+@st.cache_resource
+def get_ws():
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+    creds = None
+    try:
+        if "gcp_service_account" in st.secrets:
+            creds = Credentials.from_service_account_info(
+                st.secrets["gcp_service_account"],
+                scopes=scopes
+            )
+    except Exception:
+        creds = None
+    if creds is None:
+        creds = Credentials.from_service_account_file(KEYFILE, scopes=scopes)
+    gc = gspread.authorize(creds)
+    sh = gc.open_by_url("https://docs.google.com/spreadsheets/d/18By2jSoHEXI1WLCBYh8YXnMaCtfPNM1GsruV-pfdsXI/edit")
+    return sh.sheet1
     
 @st.cache_data(ttl=10)
 def load_data():
