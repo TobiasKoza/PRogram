@@ -9,6 +9,8 @@ import streamlit as st
 import streamlit_authenticator as stauth 
 import base64
 import calendar
+import streamlit.components.v1 as components
+
 
 
 SHEET_NAME = "tennis_elo_template"
@@ -538,48 +540,55 @@ def compute_player_stats_cached(df: pd.DataFrame, current_user: str):
         doubles_opponents
     )
 
+import streamlit.components.v1 as components
+
 def render_player_calendar(player_dates):
     today = datetime.now().date()
     cal = calendar.Calendar(firstweekday=0)
     month_days = cal.monthdatescalendar(today.year, today.month)
-    month_name = ["Leden", "Únor", "Březen", "Duben", "Květen", "Červen", "Červenec", "Srpen", "Září", "Říjen", "Listopad", "Prosinec"][today.month-1]
+    month_name = ["Leden","Únor","Březen","Duben","Květen","Červen","Červenec","Srpen","Září","Říjen","Listopad","Prosinec"][today.month-1]
 
-    html = f'<div style="text-align:center; margin-bottom:10px; font-weight:bold; color:gray;">{month_name} {today.year}</div>'
-    html += '<div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; max-width: 250px; margin: auto;">'
-    
-    # Hlavička dnů
-    for day in ["Po", "Út", "St", "Čt", "Pá", "So", "Ne"]:
-        html += f'<div style="font-size: 10px; color: gray; text-align: center;">{day}</div>'
+    html = []
+    html.append(f"<div style='text-align:center; margin-bottom:10px; font-weight:bold; color:gray;'>{month_name} {today.year}</div>")
+    html.append("<div style='display:grid; grid-template-columns:repeat(7, 1fr); gap:5px; max-width:250px; margin:auto;'>")
+
+    # hlavička dnů
+    for day in ["Po","Út","St","Čt","Pá","So","Ne"]:
+        html.append(f"<div style='font-size:10px; color:gray; text-align:center;'>{day}</div>")
 
     for week in month_days:
         for day in week:
             is_match = day in player_dates
             is_today = day == today
-            current_month = day.month == today.month
-            
-            # Styl buňky
+            current_month = (day.month == today.month)
+
             bg = "rgba(46, 204, 113, 0.4)" if is_match else "rgba(255,255,255,0.05)"
             border = "1px solid #2ecc71" if is_match else "1px solid rgba(255,255,255,0.1)"
             opacity = "1" if current_month else "0.2"
             color = "white" if current_month else "gray"
-            circle = 'border-radius: 50%;' if is_match else 'border-radius: 4px;'
-            
-            html += f'''
-            <div style="
-                aspect-ratio: 1/1; 
-                display: flex; 
-                align-items: center; 
-                justify-content: center; 
-                font-size: 12px; 
-                background: {bg}; 
-                border: {border}; 
-                {circle}
-                color: {color};
-                opacity: {opacity};
-                { "box-shadow: 0 0 5px #fff;" if is_today else "" }
-            ">{day.day}</div>'''
-    html += '</div>'
-    return html
+            radius = "50%" if is_match else "4px"
+            shadow = "box-shadow: 0 0 5px #fff;" if is_today else ""
+
+            html.append(
+                "<div style='"
+                f"aspect-ratio:1/1;"
+                f"display:flex; align-items:center; justify-content:center;"
+                f"font-size:12px;"
+                f"background:{bg};"
+                f"border:{border};"
+                f"border-radius:{radius};"
+                f"color:{color};"
+                f"opacity:{opacity};"
+                f"{shadow}"
+                f"'>"
+                f"{day.day}"
+                "</div>"
+            )
+
+    html.append("</div>")
+    return "".join(html)
+
+
 # --- UI STREAMLIT ---
 st.set_page_config(page_title="Tennis ELO Žebříček", page_icon="🎾", layout="wide")
 # --- NOVÝ OPRAVENÝ BLOK NADPISU ---
@@ -1236,7 +1245,7 @@ with tab_stats:
         # 3. VYKRESLENÍ KALENDÁŘE A ELO GRAFU
         col_cal, col_info = st.columns([1, 2])
         with col_cal:
-            st.markdown(render_player_calendar(set(p_dates)), unsafe_allow_html=True)
+            components.html(render_player_calendar(set(p_dates)), height=310)
         with col_info:
             count = len([d for d in p_dates if d.month == datetime.now().month])
             word = "zápas" if count == 1 else ("zápasy" if 1 < count < 5 else "zápasů")
