@@ -5,10 +5,10 @@ import gspread
 import streamlit as st
 from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta
-import streamlit as st
 import streamlit_authenticator as stauth 
 import base64
 import calendar
+import plotly.express as px
 import streamlit.components.v1 as components
 
 
@@ -542,49 +542,43 @@ def compute_player_stats_cached(df: pd.DataFrame, current_user: str):
 
 import streamlit.components.v1 as components
 
-def render_player_calendar(player_dates):
-    today = datetime.now().date()
+def render_player_calendar(player_dates, year, month):
     cal = calendar.Calendar(firstweekday=0)
-    month_days = cal.monthdatescalendar(today.year, today.month)
-    month_name = ["Leden","Únor","Březen","Duben","Květen","Červen","Červenec","Srpen","Září","Říjen","Listopad","Prosinec"][today.month-1]
+    try:
+        month_days = cal.monthdatescalendar(year, month)
+    except:
+        return "<div style='color:red;'>Chyba kalendáře</div>"
+        
+    month_names_cz = ["Leden","Únor","Březen","Duben","Květen","Červen","Červenec","Srpen","Září","Říjen","Listopad","Prosinec"]
+    month_name = month_names_cz[month-1]
+    today = datetime.now().date()
 
     html = []
-    html.append(f"<div style='text-align:center; margin-bottom:10px; font-weight:bold; color:gray;'>{month_name} {today.year}</div>")
-    html.append("<div style='display:grid; grid-template-columns:repeat(7, 1fr); gap:5px; max-width:250px; margin:auto;'>")
+    html.append(f"<div style='text-align:center; margin-bottom:10px; font-weight:bold; color:#2ecc71; font-size:18px; font-family:sans-serif;'>{month_name} {year}</div>")
+    html.append("<div style='display:grid; grid-template-columns:repeat(7, 1fr); gap:5px; max-width:280px; margin:auto; font-family:sans-serif;'>")
 
-    # hlavička dnů
-    for day in ["Po","Út","St","Čt","Pá","So","Ne"]:
-        html.append(f"<div style='font-size:10px; color:gray; text-align:center;'>{day}</div>")
+    for day_name in ["Po","Út","St","Čt","Pá","So","Ne"]:
+        html.append(f"<div style='font-size:10px; color:gray; text-align:center;'>{day_name}</div>")
 
     for week in month_days:
         for day in week:
-            is_match = day in player_dates
-            is_today = day == today
-            current_month = (day.month == today.month)
+            # Kontrola, zda hráč v tento den hrál
+            is_match = any(d == day for d in player_dates)
+            is_today = (day == today)
+            is_current_month = (day.month == month)
 
-            bg = "rgba(46, 204, 113, 0.4)" if is_match else "rgba(255,255,255,0.05)"
+            bg = "rgba(46, 204, 113, 0.5)" if is_match else "rgba(255,255,255,0.05)"
             border = "1px solid #2ecc71" if is_match else "1px solid rgba(255,255,255,0.1)"
-            opacity = "1" if current_month else "0.2"
-            color = "white" if current_month else "gray"
+            opacity = "1" if is_current_month else "0.2"
+            color = "white" if is_current_month else "gray"
             radius = "50%" if is_match else "4px"
-            shadow = "box-shadow: 0 0 5px #fff;" if is_today else ""
+            shadow = "box-shadow: 0 0 10px rgba(255,255,255,0.5);" if is_today else ""
 
             html.append(
-                "<div style='"
-                f"aspect-ratio:1/1;"
-                f"display:flex; align-items:center; justify-content:center;"
-                f"font-size:12px;"
-                f"background:{bg};"
-                f"border:{border};"
-                f"border-radius:{radius};"
-                f"color:{color};"
-                f"opacity:{opacity};"
-                f"{shadow}"
-                f"'>"
-                f"{day.day}"
-                "</div>"
+                f"<div style='aspect-ratio:1/1; display:flex; align-items:center; justify-content:center; "
+                f"font-size:12px; background:{bg}; border:{border}; border-radius:{radius}; "
+                f"color:{color}; opacity:{opacity}; {shadow}'>{day.day}</div>"
             )
-
     html.append("</div>")
     return "".join(html)
 
@@ -1217,7 +1211,7 @@ with tab_stats:
         current_user = st.session_state.get("name")
         bar(f"Statistiky hráče: {current_user}")
 
-        # 1. POMOCNÉ FUNKCE (Musí být nahoře, aby nebyl NameError)
+        # --- 1. POMOCNÉ FUNKCE (DEFINICE UVNITŘ BLOKU) ---
         def get_players(team_str):
             return [p.strip() for p in str(team_str).split("+") if p.strip()]
 
@@ -1235,38 +1229,77 @@ with tab_stats:
                     elif r["winner"] == "A": l += 1
             return w, l
 
-        # 2. VÝPOČET DAT PRO KALENDÁŘ
+        # --- 2. INICIALIZACE A NAVIGACE KALENDÁŘE ---
+        if "cal_month" not in st.session_state:
+            st.session_state.cal_month = datetime.now().month
+            st.session_state.cal_year = datetime.now().year
+
+        col_nav1, col_nav2, col_nav3 = st.columns([1, 2, 1])
+        with col_nav1:
+            if st.button("⬅️", use_container_width=True):
+                st.session_state.cal_month -= 1
+                if st.session_state.cal_month < 1:
+                    st.session_state.cal_month = 12
+                    st.session_state.cal_year -= 1
+                st.rerun()
+        with col_nav3:
+            if st.button("➡️", use_container_width=True):
+                st.session_state.cal_month += 1
+                if st.session_state.cal_month > 12:
+                    st.session_state.cal_month = 1
+                    st.session_state.cal_year += 1
+                st.rerun()
+
+        # --- 3. VÝPOČET DAT PRO KALENDÁŘ ---
         p_dates = []
         for _, r in df_all.iterrows():
             if current_user in get_players(r["team_a"]) or current_user in get_players(r["team_b"]):
                 d_obj = parse_ddmmyyyy(r["date"])
                 if d_obj: p_dates.append(d_obj)
         
-        # 3. VYKRESLENÍ KALENDÁŘE A ELO GRAFU
-        col_cal, col_info = st.columns([1, 2])
+        # --- 4. VYKRESLENÍ KALENDÁŘE A ELO GRAFU ---
+        col_cal, col_info = st.columns([1.2, 2])
         with col_cal:
-            components.html(render_player_calendar(set(p_dates)), height=310)
+            cal_html = render_player_calendar(set(p_dates), st.session_state.cal_year, st.session_state.cal_month)
+            components.html(cal_html, height=320)
+            
         with col_info:
-            count = len([d for d in p_dates if d.month == datetime.now().month])
-            word = "zápas" if count == 1 else ("zápasy" if 1 < count < 5 else "zápasů")
+            count = len([d for d in p_dates if d.month == st.session_state.cal_month and d.year == st.session_state.cal_year])
+            # Česká gramatika
+            if count == 1: word = "zápas"
+            elif 1 < count < 5: word = "zápasy"
+            else: word = "zápasů"
             
             st.markdown(f"""
                 <div style="padding: 15px; color: rgba(255,255,255,0.8); font-size: 14px; background: rgba(255,255,255,0.03); border-radius: 12px; border-left: 4px solid #2ecc71;">
-                    Tento měsíc jsi odehrál <b>{count}</b> {word}.<br>
-                    <span style="font-size: 12px; opacity: 0.7;">Zelená kolečka v kalendáři značí dny, kdy jsi byl na kurtu.</span>
+                    V tomto období jsi odehrál <b>{count}</b> {word}.<br>
+                    <span style="font-size: 12px; opacity: 0.7;">Zelená kolečka v kalendáři značí dny se zápisem.</span>
                 </div>
+                <div style="height: 30px;"></div>
             """, unsafe_allow_html=True)
             
-            # Graf vývoje ELO (akcie)
+            # Interaktivní ELO Graf (Plotly)
             hist_df_for_graph = build_player_history(df_all, current_user)
             if not hist_df_for_graph.empty:
                 graph_data = hist_df_for_graph.iloc[::-1].copy()
-                st.line_chart(graph_data.set_index("Datum")["ELO po"], color="#2ecc71", height=200)
+                min_elo = graph_data["ELO po"].min()
+                max_elo = graph_data["ELO po"].max()
+                
+                fig = px.line(graph_data, x="Datum", y="ELO po", markers=True, 
+                              color_discrete_sequence=["#2ecc71"])
+                fig.update_layout(
+                    height=220, margin=dict(l=0, r=0, t=0, b=0),
+                    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                    yaxis_title=None, xaxis_title=None,
+                    yaxis_range=[min_elo - 10, max_elo + 10]
+                )
+                fig.update_xaxes(showgrid=False, color="gray")
+                fig.update_yaxes(showgrid=True, gridcolor="rgba(255,255,255,0.05)", color="gray")
+                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
         st.write("")
-        df_all = DF_ALL
         
-        # 4. TABULKY STATISTIK (Z CACHE)
+        # --- 5. TABULKY STATISTIK (Z CACHE) ---
         (df_singles, df_d_partners, df_d_opponents, singles_opponents, 
          doubles_partners, doubles_opponents) = compute_player_stats_cached(df_all, current_user)
 
@@ -1283,7 +1316,7 @@ with tab_stats:
 
         st.divider()
         
-        # 5. DETAILNÍ ROZBORY (H2H)
+        # --- 6. DETAILNÍ ROZBORY (H2H) ---
         st.subheader("🔍 Detailní rozbory (Dvouhra a Čtyřhra)")
         
         if "sel_opp" not in st.session_state: st.session_state.sel_opp = None
