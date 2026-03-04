@@ -1456,6 +1456,8 @@ with tab2:
             st.session_state["_clear_add"] = False
 
         all_players = sorted(compute_elo_with_meta()[0].keys())
+        retired_players = get_retired_players(DF_ALL)
+        active_players = [p for p in all_players if p not in retired_players]
         
         bar("Přidat nový zápas")
         
@@ -1470,18 +1472,18 @@ with tab2:
             date = st.date_input("Datum", key="match_date")
             
             if "Singles" in m_type:
-                p1 = st.selectbox("Hráč A", all_players, index=None, placeholder="— nevybráno —", key="s1")
-                p2 = st.selectbox("Hráč B", all_players, index=None, placeholder="— nevybráno —", key="s2")
-                team_a = p1 if p1 is not None else ""
+                p1 = st.selectbox("Hráč A", active_players, index=None, placeholder="— nevybráno —", key="s1")
+                p2 = st.selectbox("Hráč B", active_players, index=None, placeholder="— nevybráno —", key="s2")
+                team_a = p1 if p1 is not None else ""  
                 team_b = p2 if p2 is not None else ""
             else:
                 c_a1, c_a2 = st.columns(2)
-                with c_a1: p1a = st.selectbox("Tým A - Hráč 1", all_players, index=None, placeholder="— nevybráno —", key="d_a1")
-                with c_a2: p1b = st.selectbox("Tým A - Hráč 2", all_players, index=None, placeholder="— nevybráno —", key="d_a2")
+                with c_a1: p1a = st.selectbox("Tým A - Hráč 1", active_players, index=None, placeholder="— nevybráno —", key="d_a1")
+                with c_a2: p1b = st.selectbox("Tým A - Hráč 2", active_players, index=None, placeholder="— nevybráno —", key="d_a2")
                 
                 c_b1, c_b2 = st.columns(2)
-                with c_b1: p2a = st.selectbox("Tým B - Hráč 1", all_players, index=None, placeholder="— nevybráno —", key="d_b1")
-                with c_b2: p2b = st.selectbox("Tým B - Hráč 2", all_players, index=None, placeholder="— nevybráno —", key="d_b2")
+                with c_b1: p2a = st.selectbox("Tým B - Hráč 1", active_players, index=None, placeholder="— nevybráno —", key="d_b1")
+                with c_b2: p2b = st.selectbox("Tým B - Hráč 2", active_players, index=None, placeholder="— nevybráno —", key="d_b2")
                 team_a = f"{p1a}+{p1b}" if (p1a and p1b) else ""
                 team_b = f"{p2a}+{p2b}" if (p2a and p2b) else ""
                 
@@ -1493,6 +1495,10 @@ with tab2:
             sets = st.text_input("Gemy setů (např. 6,4,6)", key="sets_in")
             
             if st.button("💾 Uložit zápas", use_container_width=True):
+                    # pojistka: retired hráče nepustit
+                if any(p in retired_players for p in get_players(team_a) + get_players(team_b)):
+                    st.error("Hráč s ukončenou kariérou nelze zapsat do zápasu.")
+                    st.stop()
                 if m_type == "Singles":
                     if (p1 is None) or (p2 is None):
                         st.error("Vyber oba hráče.")
@@ -1534,7 +1540,7 @@ with tab2:
 
         with adj_col1:
             bar("Upravit existující ELO")
-            adj_player = st.selectbox("Hráč", all_players, index=None, placeholder="— nevybráno —", key="adj_p")
+            adj_player = st.selectbox("Hráč", active_players, index=None, placeholder="— nevybráno —", key="adj_p")
             adj_delta = st.number_input("Změna (např. 5 nebo -3)", step=1, key="adj_delta")
             adj_reason = st.text_input("Důvod úpravy", key="adj_reason")
 
