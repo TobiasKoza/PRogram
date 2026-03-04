@@ -952,7 +952,7 @@ with tab1:
             with st.expander("⚙️ Správa stavu tvé kariéry"):
                 target = st.selectbox("Admin: Vyber hráče:", options=sorted(list(ratings.keys())), key="admin_ret_tab1") if user_now == "Tobi" else user_now
                 is_ret = target in retired_players
-                if st.button("🎾 Obnovit kariéru" if is_ret else "🛑 Ukončit kariéru", use_container_width=True):
+                if st.button("✅ Obnovit kariéru" if is_ret else "🛑 Ukončit kariéru", use_container_width=True):
                     toggle_career(target, retired_players)
                     st.rerun()
 
