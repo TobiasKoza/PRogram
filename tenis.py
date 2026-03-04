@@ -970,8 +970,10 @@ with tab1:
                     st.rerun()
 
     with right:
-        st.markdown(f'<div class="section-bar">Poslední zápasy</div>', unsafe_allow_html=True)
-        lastN_df = get_last_matches(DF_ALL, n=len(players_out))
+        n_right = len(players_out)  # stejné X jako počet řádků vlevo (bez headeru)
+        st.markdown(f'<div class="section-bar">Posledních {n_right} zápasů</div>', unsafe_allow_html=True)
+
+        lastN_df = get_last_matches(DF_ALL, n=n_right)
         st.markdown(f'<div class="hist-wrap">{lastN_df.to_html(index=False, border=0)}</div>', unsafe_allow_html=True)
 
     st.write("---")
