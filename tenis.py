@@ -857,6 +857,8 @@ with tab1:
             "__retired": is_retired,
             "__ranked": is_ranked,
             "__elo_num": int(round(float(elo))),
+            "__td_num": float(td),          # <- season total delta (číslo)
+            "__ldel_num": float(ldel),      # <- last delta (číslo)
             "ELO": round(float(elo), 2),
             "Poslední zápas": ld_str,
             "Δ ELO (posl.)": f"{td:+.0f} ({ldel:+.0f})",
@@ -887,14 +889,14 @@ with tab1:
     active_ranked_df.insert(0, "#", range(1, len(active_ranked_df) + 1))
     if not active_ranked_df.empty:
         active_ranked_df.iloc[0, active_ranked_df.columns.get_loc("Hráč")] = f"👑 {active_ranked_df.iloc[0]['Hráč']}"
-    active_out = active_ranked_df.drop(columns=["__ranked", "__elo_num", "__ld", "__retired"])
+    active_out = active_ranked_df.drop(columns=["__ranked", "__elo_num", "__ld", "__retired", "__td_num", "__ldel_num"])
 
     # Spodní Tabulka (Retired úplně dolů)
     inactive_df = inactive_df.sort_values(["__retired", "__elo_num"], ascending=[True, False]).reset_index(drop=True)
     inactive_df.insert(0, "#", ["unranked"] * len(inactive_df))
     inactive_df["ELO"] = "0"
     inactive_df["Δ ELO (posl.)"] = "0 (0)"
-    inactive_out = inactive_df.drop(columns=["__ranked", "__elo_num", "__ld", "__retired"])
+    inactive_out = inactive_df.drop(columns=["__ranked", "__elo_num", "__ld", "__retired", "__td_num", "__ldel_num"])
 
     # Separátor
     sep_txt = "Hráči neaktivní nebo s ukončenou kariérou"
@@ -917,6 +919,12 @@ with tab1:
         parts.append("<tr>")
         for c in cols:
             v, c_style = row[c], row_style
+            # Barva kariéry: aktivní modře, ukončeno červeně
+            if c == "Kariéra" and row["#"] != "unranked":
+                if is_retired:
+                    c_style += "color:#e74c3c; font-weight:800;"
+                else:
+                    c_style += "color:#3498db; font-weight:800;"
             if c == "Poslední zápas" and not (is_retired or row["#"] == "unranked"):
                 d_obj = _parse_date(str(v))
                 if d_obj:
@@ -925,8 +933,12 @@ with tab1:
                     elif days <= 20: c_style += "color:#f1c40f; font-weight:700;"
                     else: c_style += "color:#e74c3c; font-weight:700;"
             if c == "Δ ELO (posl.)" and row["#"] != "unranked":
-                if "+" in str(v) and "(" in str(v): c_style += "color:#2ecc71; font-weight:700;"
-                elif "-" in str(v) and "(" in str(v): c_style += "color:#e74c3c; font-weight:700;"
+                # sezónní delta bereme z rank_df (číslo), ne z textu
+                td_num = float(rank_df.loc[rank_df["Hráč"].str.replace("👑 ", "", regex=False) == str(row["Hráč"]).replace("👑 ", ""), "__td_num"].iloc[0]) if "rank_df" in locals() else 0.0
+                if td_num > 0:
+                    c_style += "color:#2ecc71; font-weight:800;"
+                elif td_num < 0:
+                    c_style += "color:#e74c3c; font-weight:800;"
             parts.append(f'<td style="{c_style}">{v}</td>')
         parts.append("</tr>")
     parts.append("</tbody></table></div>")
