@@ -853,7 +853,7 @@ with tab1:
 
         rows.append({
             "Hráč": p,
-            "Kariéra": "🛑 Ukončeno" if is_retired else "🎾 Aktivní",
+            "Kariéra": "🛑 Ukončeno" if is_retired else "Aktivní",
             "__retired": is_retired,
             "__ranked": is_ranked,
             "__elo_num": int(round(float(elo))),
