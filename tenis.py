@@ -162,11 +162,24 @@ def delete_match_by_row(row_index):
         st.error(f"Chyba při mazání v Google Sheets: {e}")
 
 def get_retired_players(df):
-    """Vrátí seznam hráčů, kteří mají ukončenou kariéru."""
+    """Vrátí set hráčů, kteří mají ukončenou kariéru (poslední toggle podle data + pořadí v tabulce)."""
     career_df = df[df["type"] == "career_toggle"].copy()
-    if career_df.empty: return set()
+    if career_df.empty:
+        return set()
+
+    # seřaď podle data (a když je stejné datum, nech rozhodnout pořadí řádku v sheetu)
+    def _dt(s):
+        try:
+            return datetime.strptime(str(s).strip(), "%d.%m.%Y")
+        except:
+            return datetime.min
+
+    career_df["__dt"] = career_df["date"].apply(_dt)
+    career_df["__row"] = career_df.index  # pojistka pro stabilní pořadí
+    career_df = career_df.sort_values(["__dt", "__row"], ascending=[True, True])
+
     last_states = career_df.drop_duplicates(subset=["team_a"], keep="last")
-    return set(last_states[last_states["team_b"] == "retired"]["team_a"].unique())
+    return set(last_states[last_states["team_b"] == "retired"]["team_a"].astype(str).str.strip().unique())
 
 def toggle_career(player_name, retired_list):
     """Změní stav kariéry (active <-> retired) a uloží do DB."""
