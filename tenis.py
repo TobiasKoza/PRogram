@@ -153,15 +153,32 @@ def delete_match_by_row(row_index):
     if row_index is None or str(row_index) == 'nan' or row_index == "":
         st.error("Chyba: Nepodařilo se identifikovat řádek v databázi.")
         return
-    
     try:
         ws = get_ws()
-        # Převod na int a smazání
         idx = int(float(row_index)) 
         ws.delete_rows(idx)
         st.cache_data.clear()
     except Exception as e:
         st.error(f"Chyba při mazání v Google Sheets: {e}")
+
+def get_retired_players(df):
+    """Vrátí seznam hráčů, kteří mají ukončenou kariéru."""
+    career_df = df[df["type"] == "career_toggle"].copy()
+    if career_df.empty: return set()
+    last_states = career_df.drop_duplicates(subset=["team_a"], keep="last")
+    return set(last_states[last_states["team_b"] == "retired"]["team_a"].unique())
+
+def toggle_career(player_name, retired_list):
+    """Změní stav kariéry (active <-> retired) a uloží do DB."""
+    new_status = "active" if player_name in retired_list else "retired"
+    save_match({
+        "date": datetime.now().strftime("%d.%m.%Y"),
+        "type": "career_toggle",
+        "team_a": player_name,
+        "team_b": new_status,
+        "author": st.session_state.get("name", "System")
+    })
+    st.cache_data.clear()
 
 @st.cache_data(ttl=600)
 def compute_elo_with_meta():
@@ -769,6 +786,7 @@ tab1, tab_sd, tab_stats, tab2, tab3 = st.tabs(["🏆 Žebříček", "🎾 Single
 # načti sheet JEDNOU pro celý run
 DF_ALL = load_data()
 # --- TAB 1: ŽEBŘÍČEK ---
+# --- TAB 1: ŽEBŘÍČEK ---
 with tab1:
     st.markdown("""
     <style>
@@ -782,8 +800,6 @@ with tab1:
       font-size: 22px;
       margin: 8px 0 10px 0;
     }
-
-    /* Společný styl pro všechny vlastní HTML tabulky (vzhled z Tab 3) */
     .hist-wrap {
       width: 100%;
       overflow-x: auto;
@@ -816,19 +832,15 @@ with tab1:
       text-align: center !important;
       font-size: 12.5px !important;
     }
-    .hist-wrap th:last-child, .hist-wrap td:last-child {
-      border-right: none;
-    }
-    .hist-wrap tr:last-child td {
-      border-bottom: none;
-    }
-    /* Skrytí prázdného th z pandas styleru (index sloupec) */
+    .hist-wrap th:last-child, .hist-wrap td:last-child { border-right: none; }
+    .hist-wrap tr:last-child td { border-bottom: none; }
     .hist-wrap .blank { display: none; }
     .hist-wrap .row_heading { display: none; }
     </style>
     """, unsafe_allow_html=True)
 
     ratings, last_date, total_delta, last_delta, played_elo_match = compute_elo_with_meta()
+    retired_players = get_retired_players(DF_ALL)
 
     rows = []
     for p, elo in ratings.items():
@@ -836,259 +848,125 @@ with tab1:
         ld_str = ld.strftime("%d.%m.%Y") if ld else "—"
         td = total_delta.get(p, 0.0)
         ldel = last_delta.get(p, 0.0)
-
-        is_ranked = bool(played_elo_match.get(p, False))  # ranked = někdy odehrál singles/doubles
+        is_retired = p in retired_players
+        is_ranked = bool(played_elo_match.get(p, False))
 
         rows.append({
             "Hráč": p,
+            "Kariéra": "🛑 Ukončeno" if is_retired else "🎾 Aktivní",
+            "__retired": is_retired,
             "__ranked": is_ranked,
-            "__elo_num": int(round(float(elo))),  # pro řazení ranked
+            "__elo_num": int(round(float(elo))),
             "ELO": round(float(elo), 2),
             "Poslední zápas": ld_str,
             "Δ ELO (posl.)": f"{td:+.0f} ({ldel:+.0f})",
         })
 
     rank_df = pd.DataFrame(rows)
-
-    # rozdělení ranked / unranked
-    ranked_df = rank_df[rank_df["__ranked"]].copy()
-    unranked_df = rank_df[~rank_df["__ranked"]].copy()
-
-    # --- 30 dní bez zápasu (jen pro ranked hráče, protože unranked jdou vždy dolů) ---
     today = datetime.now().date()
     cutoff_date = today - timedelta(days=30)
-
+    
     def _parse_date(s):
-        try:
-            return datetime.strptime(s, "%d.%m.%Y").date()
-        except:
-            return None
+        try: return datetime.strptime(str(s).strip(), "%d.%m.%Y").date()
+        except: return None
+    rank_df["__ld"] = rank_df["Poslední zápas"].apply(_parse_date)
 
-    ranked_df["__ld"] = ranked_df["Poslední zápas"].apply(_parse_date)
+    # Aktivní v žebříčku: Ranked + Není retired + Zápas v posl. 30 dnech
+    active_ranked_df = rank_df[
+        (rank_df["__ranked"]) & 
+        (~rank_df["__retired"]) & 
+        (rank_df["__ld"].notna()) & 
+        (rank_df["__ld"] >= cutoff_date)
+    ].copy()
 
-    active_ranked_df = ranked_df[(ranked_df["__ld"].notna()) & (ranked_df["__ld"] >= cutoff_date)].copy()
-    inactive_ranked_df = ranked_df[(ranked_df["__ld"].isna()) | (ranked_df["__ld"] < cutoff_date)].copy()
+    # Ostatní: Unranked, neaktivní nebo v důchodu
+    inactive_df = rank_df[~rank_df.index.isin(active_ranked_df.index)].copy()
 
-    # --- HORNÍ TABULKA = jen active ranked ---
+    # Horní Tabulka
     active_ranked_df = active_ranked_df.sort_values("__elo_num", ascending=False).reset_index(drop=True)
     active_ranked_df.insert(0, "#", range(1, len(active_ranked_df) + 1))
-
     if not active_ranked_df.empty:
         active_ranked_df.iloc[0, active_ranked_df.columns.get_loc("Hráč")] = f"👑 {active_ranked_df.iloc[0]['Hráč']}"
+    active_out = active_ranked_df.drop(columns=["__ranked", "__elo_num", "__ld", "__retired"])
 
-    active_out = active_ranked_df.drop(columns=["__ranked", "__elo_num", "__ld"])
+    # Spodní Tabulka (Retired úplně dolů)
+    inactive_df = inactive_df.sort_values(["__retired", "__elo_num"], ascending=[True, False]).reset_index(drop=True)
+    inactive_df.insert(0, "#", ["unranked"] * len(inactive_df))
+    inactive_df["ELO"] = "0"
+    inactive_df["Δ ELO (posl.)"] = "0 (0)"
+    inactive_out = inactive_df.drop(columns=["__ranked", "__elo_num", "__ld", "__retired"])
 
-    df_all = DF_ALL
-    # pravá tabulka má mít stejný počet řádků jako levá
-
-    # --- SPODNÍ TABULKA = inactive ranked + unranked (dáme do jedné tabulky s hlavní) ---
-    inactive_ranked_df = inactive_ranked_df.sort_values("__elo_num", ascending=False).reset_index(drop=True)
-    inactive_ranked_df.insert(0, "#", ["unranked"] * len(inactive_ranked_df))
-    inactive_ranked_out = inactive_ranked_df.drop(columns=["__ranked", "__elo_num", "__ld"])
-    
-    inactive_ranked_out["ELO"] = "0"
-    inactive_ranked_out["Δ ELO (posl.)"] = "0 (0)"
-
-    unranked_df = unranked_df.sort_values("__elo_num", ascending=False).reset_index(drop=True)
-    unranked_df.insert(0, "#", ["unranked"] * len(unranked_df))
-    unranked_out = unranked_df.drop(columns=["__ranked", "__elo_num"])
-    unranked_out["ELO"] = "0"
-    unranked_out["Δ ELO (posl.)"] = "0 (0)"
-
-    # separator řádek (vizuálně "sloučený" – ostatní buňky zneviditelníme stylem)
+    # Separátor
+    sep_txt = "Hráči neaktivní nebo s ukončenou kariérou"
     sep = {c: " " for c in active_out.columns}
-    sep["#"] = " "
-    sep["Hráč"] = "Hráči bez zápasu za posledních 30 dní"
-    sep["ELO"] = " "
-    sep["Poslední zápas"] = " "
-    sep["Δ ELO (posl.)"] = " "
-    sep_row = pd.DataFrame([sep])
+    sep["Hráč"] = sep_txt
+    players_out = pd.concat([active_out, pd.DataFrame([sep]), inactive_out], ignore_index=True)
 
-    players_out = pd.concat([active_out, sep_row, inactive_ranked_out, unranked_out], ignore_index=True)
-
-    DELTA_COL = "Δ ELO (posl.)"
-
-    def _delta_color(v):
-        s = str(v).strip()
-        if not s:
-            return ""
-        try:
-            main = s.split("(", 1)[0].strip()
-            n = float(main.replace("+", "").replace("−", "-"))
-        except:
-            return ""
-        if n > 0:
-            return "color: #2ecc71; font-weight: 700;"
-        if n < 0:
-            return "color: #e74c3c; font-weight: 700;"
-        return ""
-
-    def _row_style(row):
-        # separator řádek (uvnitř tabulky)
-        if str(row.get("Hráč", "")).strip() == "Hráči bez zápasu za posledních 30 dní":
-            return [
-                "background-color: rgba(255,255,255,0.09);"
-                "color: rgba(255,255,255,0.55);"
-                "font-weight: 800;"
-            ] * len(row)
-
-        # inactive + unranked řádky (zašedlé)
-        if str(row.get("#", "")).strip() in ["inactive", "unranked"]:
-            return [
-                "color: rgba(255,255,255,0.55);"
-                "background-color: rgba(255,255,255,0.03);"
-            ] * len(row)
-
-        return [""] * len(row)
-
-    # sloučený efekt separatoru: všechny buňky kromě "Hráč" v tom řádku zneviditelníme
-    def _sep_hide_cells(row):
-        if str(row.get("Hráč", "")).strip() == "Hráči bez zápasu za posledních 30 dní":
-            out = []
-            for col in players_out.columns:
-                if col == "Hráč":
-                    out.append("text-align: center;")
-                else:
-                    out.append("color: rgba(255,255,255,0.0);")
-            return out
-        return [""] * len(row)
-
-    # --- místo pandas styleru vykresli HTML, a separator udělej colspan přes všechny sloupce ---
+    # HTML Vykreslení
     cols = list(players_out.columns)
-    ncols = len(cols)
+    parts = ['<div class="hist-wrap"><table class="hist-table"><thead><tr>']
+    for c in cols: parts.append(f"<th>{c}</th>")
+    parts.append("</tr></thead><tbody>")
 
-    def _esc(x):
-        return str(x).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-    parts = []
-    parts.append('<div class="hist-wrap"><table class="hist-table">')
-
-    # header
-    parts.append("<thead><tr>")
-    for c in cols:
-        parts.append(f"<th>{_esc(c)}</th>")
-    parts.append("</tr></thead>")
-
-    # body
-    parts.append("<tbody>")
     for _, row in players_out.iterrows():
-        is_sep = str(row.get("Hráč", "")).strip() == "Hráči bez zápasu za posledních 30 dní"
-        is_unranked = str(row.get("#", "")).strip() == "unranked"
-
-        if is_sep:
-            parts.append(
-                f'<tr>'
-                f'<td colspan="{ncols}" style="background-color: rgba(255,255,255,0.09); color: rgba(255,255,255,0.55); font-weight: 800; text-align: center;">'
-                f'Hráči bez zápasu za posledních 30 dní'
-                f'</td>'
-                f'</tr>'
-            )
+        if row["Hráč"] == sep_txt:
+            parts.append(f'<tr><td colspan="{len(cols)}" style="background:rgba(255,255,255,0.09); color:gray; font-weight:800; text-align:center;">{sep_txt}</td></tr>')
             continue
-
+        is_retired = "🛑" in str(row["Kariéra"])
+        row_style = 'color:rgba(255,255,255,0.45); background:rgba(255,255,255,0.02);' if (is_retired or row["#"] == "unranked") else ""
         parts.append("<tr>")
         for c in cols:
-            v = row.get(c, "")
-            row_style = 'color: rgba(255,255,255,0.55); background-color: rgba(255,255,255,0.03);' if is_unranked else ""
-
-            # 1. Barvení sloupce "Poslední zápas" (zelená, žlutá, červená)
-            if c == "Poslední zápas":
+            v, c_style = row[c], row_style
+            if c == "Poslední zápas" and not (is_retired or row["#"] == "unranked"):
                 d_obj = _parse_date(str(v))
-                d_color = ""
                 if d_obj:
-                    days_ago = (today - d_obj).days
-                    if days_ago <= 10: d_color = "color: #2ecc71; font-weight: 700;"    # Zelená
-                    elif days_ago <= 20: d_color = "color: #f1c40f; font-weight: 700;"  # Žlutá
-                    elif days_ago <= 30: d_color = "color: #e74c3c; font-weight: 700;"  # Červená
-                
-                parts.append(f'<td style="{row_style}{d_color}">{_esc(v)}</td>')
-                continue
-
-            # 2. Barvení Δ sloupce (původní logika)
-            if c == DELTA_COL:
-                s = str(v).strip()
-                style = ""
-                try:
-                    main = s.split("(", 1)[0].strip()
-                    n = float(main.replace("+", "").replace("−", "-"))
-                    if n > 0: style = "color: #2ecc71; font-weight: 700;"
-                    elif n < 0: style = "color: #e74c3c; font-weight: 700;"
-                except: style = ""
-                parts.append(f'<td style="{row_style}{style}">{_esc(v)}</td>')
-                continue
-
-            # Ostatní sloupce
-            parts.append(f'<td style="{row_style}">{_esc(v)}</td>')
-
+                    days = (today - d_obj).days
+                    if days <= 10: c_style += "color:#2ecc71; font-weight:700;"
+                    elif days <= 20: c_style += "color:#f1c40f; font-weight:700;"
+                    else: c_style += "color:#e74c3c; font-weight:700;"
+            if c == "Δ ELO (posl.)" and row["#"] != "unranked":
+                if "+" in str(v) and "(" in str(v): c_style += "color:#2ecc71; font-weight:700;"
+                elif "-" in str(v) and "(" in str(v): c_style += "color:#e74c3c; font-weight:700;"
+            parts.append(f'<td style="{c_style}">{v}</td>')
         parts.append("</tr>")
     parts.append("</tbody></table></div>")
 
-    html_left = "".join(parts)
-
     left, right = st.columns([3, 2], gap="large")
-
     with left:
         st.markdown('<div class="section-bar">Aktuální žebříček ELO</div>', unsafe_allow_html=True)
-        st.markdown(html_left, unsafe_allow_html=True)
+        st.markdown("".join(parts), unsafe_allow_html=True)
+        if st.session_state.get("authentication_status"):
+            user_now = st.session_state.get("name")
+            with st.expander("⚙️ Správa stavu tvé kariéry"):
+                target = st.selectbox("Admin: Vyber hráče:", options=sorted(list(ratings.keys())), key="admin_ret_tab1") if user_now == "Tobi" else user_now
+                is_ret = target in retired_players
+                if st.button("🎾 Obnovit kariéru" if is_ret else "🛑 Ukončit kariéru", use_container_width=True):
+                    toggle_career(target, retired_players)
+                    st.rerun()
 
     with right:
-        right_n = len(players_out)
+        st.markdown(f'<div class="section-bar">Poslední zápasy</div>', unsafe_allow_html=True)
+        lastN_df = get_last_matches(DF_ALL, n=len(players_out)-1)
+        st.markdown(f'<div class="hist-wrap">{lastN_df.to_html(index=False, border=0)}</div>', unsafe_allow_html=True)
 
-        match_types = ["singles", "doubles", "friendly_singles", "friendly_doubles"]
-        available_matches = int(df_all["type"].isin(match_types).sum())
-        shown_n = min(right_n, available_matches)
-
-        lastN_df = get_last_matches(df_all, n=right_n)
-
-        if len(lastN_df) < right_n:
-            pad = pd.DataFrame([{"Datum": "", "Typ": "", "Zápas": "", "Vítěz": "", "Skóre": ""}] * (right_n - len(lastN_df)))
-            lastN_df = pd.concat([lastN_df, pad], ignore_index=True)
-
-        st.markdown(f'<div class="section-bar">Posledních {shown_n} zápasů</div>', unsafe_allow_html=True)
-        html_right = lastN_df.to_html(index=False, border=0, escape=True)
-        st.markdown(f'<div class="hist-wrap">{html_right}</div>', unsafe_allow_html=True)
-
-    df_all = DF_ALL
-    all_players = sorted(list(set(list(ratings.keys()))))
-
+    st.write("---")
+    all_players_list = sorted(list(ratings.keys()))
     col_sel, _ = st.columns([3, 7])
     with col_sel:
-        picked = st.selectbox(
-            "Vyber hráče pro zobrazení historie:",
-            options=all_players,
-            index=None,  # Tímhle říkáme "nevybírej nikoho na začátku"
-            placeholder="— nevybráno —",
-            key="history_player_sel"
-        )
+        picked = st.selectbox("Vyber hráče pro zobrazení historie:", options=all_players_list, index=None, placeholder="— nevybráno —", key="history_player_sel")
 
-    # Historii vykreslíme POUZE pokud je vybrán nějaký hráč
     if picked:
         st.subheader(f"Historie hráče: {picked}")
-
-        hist_df = build_player_history(df_all, picked)
-
-        if hist_df.empty:
-            st.info("Bez zápasů.")
+        hist_df = build_player_history(DF_ALL, picked)
+        if hist_df.empty: st.info("Bez zápasů.")
         else:
             def _res_color(v):
-                s = str(v).strip().lower()
-                if s == "výhra":
-                    return "color: #2ecc71; font-weight: 800;"
-                if s == "prohra":
-                    return "color: #e74c3c; font-weight: 800;"
+                s = str(v).lower()
+                if "výhra" in s: return "color:#2ecc71; font-weight:800;"
+                if "prohra" in s: return "color:#e74c3c; font-weight:800;"
                 return ""
-
-            hist_styler = (
-                hist_df.style
-                    .hide(axis="index")
-                    .format({"ELO po": "{:.2f}"})
-                    .applymap(_res_color, subset=["Výsledek"])
-            )
-
-            html_hist = hist_styler.to_html()
+            html_hist = hist_df.style.hide(axis="index").applymap(_res_color, subset=["Výsledek"]).to_html()
             st.markdown(f'<div class="hist-wrap">{html_hist}</div>', unsafe_allow_html=True)
-    else:
-        st.info("Vyber hráče ze seznamu nahoře pro zobrazení jeho osobní historie.")
-
 # --- TAB 1.5: SINGLES A DOUBLES ---
 with tab_sd:
     df_sd = DF_ALL
