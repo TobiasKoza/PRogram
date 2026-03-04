@@ -24,6 +24,70 @@ def parse_ddmmyyyy(s: str):
     except:
         return None
 
+def format_sets_display(sets_raw):
+    """Převede '5,3,6' na '7:5, 6:3, 7:6'"""
+    if not sets_raw: return ""
+    s = str(sets_raw).strip("'").strip()
+    if not s: return ""
+    # Rozdělení podle čárky nebo dvojtečky (podpora obou formátů z DB)
+    parts = [p.strip() for p in s.replace(":", ",").replace(" ", ",").split(",") if p.strip()]
+    
+    # Pokud je v seznamu sudý počet čísel a už vypadají jako 7,5,6,3...
+    # ale my chceme logiku: jedno číslo -> doplnění vítěze
+    formatted = []
+    
+    # Detekce, zda jsou v DB už dvojice (7,5,6,3) nebo jen gemy poraženého (5,3,6)
+    if len(parts) > 0:
+        # Zkusíme detekovat, jestli jde o formát 'vítěz, poražený, vítěz, poražený'
+        # nebo jen 'poražený, poražený'. Pokud je v DB '5,3,6', je to ta druhá možnost.
+        
+        # Logika pro 5,3,6 -> 7:5, 6:3, 7:6
+        for p in parts:
+            try:
+                val = int(p)
+                if val <= 4: formatted.append(f"6:{val}")
+                elif val == 5 or val == 6: formatted.append(f"7:{val}")
+                else: formatted.append(f"6:{val}") # fallback
+            except:
+                formatted.append(p)
+    return ", ".join(formatted)
+
+def normalize_sets_input(user_input):
+    """Převede '7:5, 6:3' nebo '5,3' na čisté '5,3' pro uložení do DB"""
+    if not user_input: return ""
+    # Nahradí dvojtečky a mezery čárkami
+    s = user_input.replace(":", ",").replace(" ", ",")
+    parts = [p.strip() for p in s.split(",") if p.strip()]
+    
+    final_loser_games = []
+    for p in parts:
+        try:
+            val = int(p)
+            # Pokud uživatel zadal 7,5,6,3... vezmeme jen ty menší z dvojic
+            # Pokud zadal jen 5,3,6... vezmeme vše
+            final_loser_games.append(str(val))
+        except:
+            continue
+            
+    # Pokud uživatel zadal full skóre (7,5, 6,3), vyfiltrujeme jen ty poražené gemy (5,3)
+    # pro zachování tvého DB standardu
+    if len(final_loser_games) >= 2:
+        res = []
+        i = 0
+        while i < len(final_loser_games):
+            g1 = int(final_loser_games[i])
+            if i + 1 < len(final_loser_games):
+                g2 = int(final_loser_games[i+1])
+                # Z dvojice (7,5) vezmeme to menší (5)
+                res.append(str(min(g1, g2)))
+                i += 2
+            else:
+                res.append(str(g1))
+                i += 1
+        return ",".join(res)
+    
+    return ",".join(final_loser_games)
+
 # --- KONFIGURACE ---
 SHEET_NAME = "tennis_elo_template"
 WORKSHEET = "tennis_elo_template"
@@ -394,8 +458,10 @@ def build_full_history(df: pd.DataFrame) -> pd.DataFrame:
 
             out.append({
                 "Datum": rawd, "Typ": typ, "Zápas": f"{' + '.join(team_a)} 🆚 {' + '.join(team_b)}",
-                "Důvod": "", "Výsledek": vysledek, "Skóre": score, "Zapsal": author,
-                "row_idx": r["sheet_row"]  # <--- Tohle je klíčové pro smazání!
+                "Důvod": "", "Výsledek": vysledek, "Skóre": score, 
+                "Sety": format_sets_display(r.get("sets", "")),
+                "Zapsal": author,
+                "row_idx": r["sheet_row"]
             })
 
     if not out:
@@ -1560,9 +1626,9 @@ with tab2:
                     "team_b": team_b,
                     "winner": winner,
                     "score": score,
-                    "sets": f"'{sets}" if sets else "",
+                    "sets": f"'{normalize_sets_input(sets)}" if sets else "",
                     "reason": "",
-                    "author": st.session_state.get("name", "Neznámý")  # PŘIDAT TENTO ŘÁDEK
+                    "author": st.session_state.get("name", "Neznámý")
                 })
 
                 st.session_state["_match_saved"] = True
@@ -1702,7 +1768,13 @@ with tab3:
     """, unsafe_allow_html=True)
 
     if not display_df.empty:
-        html_table = display_df.to_html(index=False, classes="hist-table", border=0, escape=True)
+        # Přeuspořádání sloupců, aby Sety byly za Skóre
+        cols = list(display_df.columns)
+        if "Sety" in cols:
+            cols.insert(cols.index("Skóre") + 1, cols.pop(cols.index("Sety")))
+            display_df = display_df[cols]
+
+        html_table = display_df.to_html(index=False, classes="hist-table", border=0, escape=False) # escape=False aby fungovaly tooltipy/formát
         st.markdown(f'<div class="hist-wrap">{html_table}</div>', unsafe_allow_html=True)
     else:
         st.info("Zatím nejsou k dispozici žádné záznamy.")
