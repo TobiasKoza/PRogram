@@ -971,7 +971,7 @@ with tab1:
 
     with right:
         st.markdown(f'<div class="section-bar">Poslední zápasy</div>', unsafe_allow_html=True)
-        lastN_df = get_last_matches(DF_ALL, n=len(players_out)-1)
+        lastN_df = get_last_matches(DF_ALL, n=len(players_out))
         st.markdown(f'<div class="hist-wrap">{lastN_df.to_html(index=False, border=0)}</div>', unsafe_allow_html=True)
 
     st.write("---")
