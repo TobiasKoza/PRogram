@@ -38,16 +38,13 @@ def format_sets_display(sets_raw):
     
     # Detekce, zda jsou v DB už dvojice (7,5,6,3) nebo jen gemy poraženého (5,3,6)
     if len(parts) > 0:
-        # Zkusíme detekovat, jestli jde o formát 'vítěz, poražený, vítěz, poražený'
-        # nebo jen 'poražený, poražený'. Pokud je v DB '5,3,6', je to ta druhá možnost.
-        
         # Logika pro 5,3,6 -> 7:5, 6:3, 7:6
         for p in parts:
             try:
-                val = int(p)
+                # abs() zajistí, že i z -4 uděláme 4
+                val = abs(int(p.replace("-", "")))
                 if val <= 4: formatted.append(f"6:{val}")
-                elif val == 5 or val == 6: formatted.append(f"7:{val}")
-                else: formatted.append(f"6:{val}") # fallback
+                elif val >= 5: formatted.append(f"7:{val}")
             except:
                 formatted.append(p)
     return ", ".join(formatted)
@@ -351,13 +348,16 @@ def build_player_history(df, target):
                 res = "Výhra" if ((winner == "A" and target in team_a) or (winner == "B" and target in team_b)) else "Prohra"
                 match_txt = f"{' + '.join(team_a)} 🆚 {' + '.join(team_b)}"
                 
+                # Zde aplikujeme formátování na sety
+                pretty_sets = format_sets_display(sets_raw)
+                
                 hist.append({
                     "Datum": rawd,
                     "Typ": "Přátelák" if is_friendly else base_type,
                     "Zápas": match_txt,
                     "Výsledek": res,
                     "Skóre": score,
-                    "Sety": sets_raw,
+                    "Sety": pretty_sets,
                     "Rozdíl ELO": "" if is_friendly else f"{'+' if round(d_pl) >= 0 else ''}{int(round(d_pl))}",
                     "ELO po": round(ratings[target], 2)
                 })
@@ -1473,8 +1473,11 @@ with tab_stats:
                 if (current_user in ta and selected_opp in tb) or (current_user in tb and selected_opp in ta):
                     winner_name = ta[0] if r["winner"] == "A" else tb[0]
                     h2h_matches.append({
-                        "Datum": r["date"], "Zápas": f"{ta[0]} vs {tb[0]}", "Vítěz": winner_name, 
-                        "Skóre": r["score"], "Sety": str(r["sets"]).replace("'", "")
+                        "Datum": r["date"], 
+                        "Zápas": f"{ta[0]} vs {tb[0]}",
+                        "Vítěz": winner_name, 
+                        "Skóre": r["score"], 
+                        "Sety": format_sets_display(r.get("sets", ""))
                     })
             if h2h_matches:
                 df_h2h = pd.DataFrame(h2h_matches).iloc[::-1]
@@ -1508,7 +1511,7 @@ with tab_stats:
                     is_win = (we_ta and r["winner"] == "A") or (we_tb and r["winner"] == "B")
                     partner_matches.append({
                         "Datum": r["date"], "Soupeři": opps_str, "Výsledek": "Výhra" if is_win else "Prohra", 
-                        "Skóre": r["score"], "Sety": str(r["sets"]).replace("'", "")
+                        "Skóre": r["score"], "Sety": format_sets_display(r.get("sets", ""))
                     })
             
             st.markdown("---")
