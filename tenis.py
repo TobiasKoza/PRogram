@@ -1388,7 +1388,8 @@ with tab_stats:
             </div>
             """, unsafe_allow_html=True)
             st.write("")
-
+            st.write("")
+            st.write("")
             h2h_matches = []
             for _, r in DF_ALL.iterrows():
                 if "singles" not in r["type"]: continue
