@@ -1,3 +1,5 @@
+import textwrap
+
 import pandas as pd
 import os
 import math
@@ -1370,80 +1372,51 @@ with tab_stats:
         #
         # --- H2H UNIFIED LAYOUT ---
 
-    def render_h2h(player_a, player_b, season_a, season_b, h2h_a, h2h_b):
+        def render_h2h(player_a, player_b, season_a, season_b, h2h_a, h2h_b):
+            sa_w, sa_l = season_a
+            sb_w, sb_l = season_b
 
-        sa_w, sa_l = season_a
-        sb_w, sb_l = season_b
+            sa_g = sa_w + sa_l
+            sb_g = sb_w + sb_l
+            h_g = h2h_a + h2h_b
 
-        sa_g = sa_w + sa_l
-        sb_g = sb_w + sb_l
+            sa_pct = (sa_w/sa_g*100) if sa_g else 0
+            sb_pct = (sb_w/sb_g*100) if sb_g else 0
+            h_pct_a = (h2h_a/h_g*100) if h_g else 0
+            h_pct_b = (h2h_b/h_g*100) if h_g else 0
 
-        h_g = h2h_a + h2h_b
-
-        sa_pct = (sa_w/sa_g*100) if sa_g else 0
-        sb_pct = (sb_w/sb_g*100) if sb_g else 0
-
-        h_pct_a = (h2h_a/h_g*100) if h_g else 0
-        h_pct_b = (h2h_b/h_g*100) if h_g else 0
-
-        st.markdown(f"""
-        <div style="background:#7f97c7;padding:20px;border-radius:10px;text-align:center;color:#222;">
-            <h1 style="margin:0;">H2H</h1>
-            <div style="display:flex;justify-content:space-between;margin-top:10px;font-size:18px;font-weight:600;">
-                <div>{player_a}</div>
-                <div>vs</div>
-                <div>{player_b}</div>
-            </div>
-        </div>
-
-        <div style="background:#e5e5e5;padding:20px;border-radius:0 0 10px 10px;color:#222;text-align:center;">
-
-            <h3>Bilance sezóny</h3>
-
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
-
-                <div>{sa_g}</div>
-                <div>Zápasů</div>
-                <div>{sb_g}</div>
-
-                <div>{sa_w}</div>
-                <div>Výhry</div>
-                <div>{sb_w}</div>
-
-                <div>{sa_l}</div>
-                <div>Prohry</div>
-                <div>{sb_l}</div>
-
-                <div>{sa_pct:.2f}%</div>
-                <div>Úspěšnost</div>
-                <div>{sb_pct:.2f}%</div>
-
+            html = textwrap.dedent(f"""
+            <div style="background:#7f97c7;padding:20px;border-radius:10px;text-align:center;color:#222;">
+                <h2 style="margin:0;">H2H</h2>
+                <div style="display:flex;justify-content:space-between;margin-top:10px;font-size:18px;font-weight:600;">
+                    <div>{player_a}</div>
+                    <div>vs</div>
+                    <div>{player_b}</div>
+                </div>
             </div>
 
-            <h3 style="margin-top:20px;">Vzájemné zápasy</h3>
+            <div style="background:#e5e5e5;padding:20px;border-radius:0 0 10px 10px;color:#222;text-align:center;">
+                <h3>Bilance sezóny</h3>
 
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+                    <div>{sa_g}</div><div>Zápasů</div><div>{sb_g}</div>
+                    <div>{sa_w}</div><div>Výhry</div><div>{sb_w}</div>
+                    <div>{sa_l}</div><div>Prohry</div><div>{sb_l}</div>
+                    <div>{sa_pct:.2f}%</div><div>Úspěšnost</div><div>{sb_pct:.2f}%</div>
+                </div>
 
-                <div>{h_g}</div>
-                <div>Zápasů</div>
-                <div>{h_g}</div>
+                <h3 style="margin-top:20px;">Vzájemné zápasy</h3>
 
-                <div>{h2h_a}</div>
-                <div>Výhry</div>
-                <div>{h2h_b}</div>
-
-                <div>{h2h_b}</div>
-                <div>Prohry</div>
-                <div>{h2h_a}</div>
-
-                <div>{h_pct_a:.2f}%</div>
-                <div>Úspěšnost</div>
-                <div>{h_pct_b:.2f}%</div>
-
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+                    <div>{h_g}</div><div>Zápasů</div><div>{h_g}</div>
+                    <div>{h2h_a}</div><div>Výhry</div><div>{h2h_b}</div>
+                    <div>{h2h_b}</div><div>Prohry</div><div>{h2h_a}</div>
+                    <div>{h_pct_a:.2f}%</div><div>Úspěšnost</div><div>{h_pct_b:.2f}%</div>
+                </div>
             </div>
+            """).strip()
 
-        </div>
-        """, unsafe_allow_html=True)
+            st.markdown(html, unsafe_allow_html=True)
 
     def render_h2h(player_a, player_b, season_a, season_b, h2h_a, h2h_b):
 
