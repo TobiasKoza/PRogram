@@ -1446,7 +1446,16 @@ with tab_stats:
         """, unsafe_allow_html=True)
 
     def render_h2h(player_a, player_b, season_a, season_b, h2h_a, h2h_b):
-        st.markdown("HTML BOX")
+        st.markdown(f"""
+        <div style="background:#7f97c7;padding:20px;border-radius:10px;text-align:center;color:#222;">
+        <h2 style="margin:0;">H2H</h2>
+        <div style="display:flex;justify-content:space-between;margin-top:10px;font-size:18px;font-weight:600;">
+        <div>{player_a}</div>
+        <div>vs</div>
+        <div>{player_b}</div>
+        </div>
+        </div>
+        """, unsafe_allow_html=True)
 
     # logika která funkci zavolá
     if st.session_state.sel_opp:
