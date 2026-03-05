@@ -1387,6 +1387,7 @@ with tab_stats:
                 </div>
             </div>
             """, unsafe_allow_html=True)
+            st.write("")
 
             h2h_matches = []
             for _, r in DF_ALL.iterrows():
