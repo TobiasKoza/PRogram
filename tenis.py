@@ -1387,9 +1387,7 @@ with tab_stats:
                 </div>
             </div>
             """, unsafe_allow_html=True)
-            st.write("")
-            st.write("")
-            st.write("")
+            st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
             h2h_matches = []
             for _, r in DF_ALL.iterrows():
                 if "singles" not in r["type"]: continue
