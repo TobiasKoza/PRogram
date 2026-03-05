@@ -1342,14 +1342,31 @@ with tab_stats:
         
         if "sel_opp" not in st.session_state: st.session_state.sel_opp = None
         if "sel_partner" not in st.session_state: st.session_state.sel_partner = None
-        
+        def reset_partner():
+            st.session_state.sel_partner = None
+
+        def reset_opp():
+            st.session_state.sel_opp = None
         col_sel_s, col_sel_d = st.columns(2)
         with col_sel_s:
-            st.selectbox("🎯 Detail soupeře (Dvouhra):", options=sorted(list(singles_opponents.keys())), 
-                         index=None, placeholder="— vyber soupeře —", key="sel_opp")
+            st.selectbox(
+                "🎯 Detail soupeře (Dvouhra):",
+                options=sorted(list(singles_opponents.keys())),
+                index=None,
+                placeholder="— vyber soupeře —",
+                key="sel_opp",
+                on_change=reset_partner
+            )
+
         with col_sel_d:
-            st.selectbox("🤝 Detail parťáka (Čtyřhra):", options=sorted(list(doubles_partners.keys())), 
-                         index=None, placeholder="— vyber parťáka —", key="sel_partner")
+            st.selectbox(
+                "🤝 Detail parťáka (Čtyřhra):",
+                options=sorted(list(doubles_partners.keys())),
+                index=None,
+                placeholder="— vyber parťáka —",
+                key="sel_partner",
+                on_change=reset_opp
+    )
         
         # --- LOGIKA VZÁJEMNÝCH ZÁPASŮ (DVOUHRA) ---
         if st.session_state.sel_opp:
