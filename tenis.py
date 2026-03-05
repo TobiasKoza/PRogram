@@ -1420,7 +1420,7 @@ with tab_stats:
                 </div>
             </div>
             """, unsafe_allow_html=True)
-            
+            st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
             partner_matches = []
             opponents_set = set()
             for _, r in DF_ALL.iterrows():
