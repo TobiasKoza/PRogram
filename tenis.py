@@ -1492,41 +1492,42 @@ with tab_stats:
 
                 st.markdown(f"""
                 <div style="
-                    background: rgba(255,255,255,0.05);
-                    padding: 22px;
-                    border-radius: 14px;
-                    border: 1px solid rgba(255,255,255,0.10);
-                    margin-top: 10px;
-                    text-align:center;
+                background: rgba(255,255,255,0.05);
+                padding: 22px;
+                border-radius: 14px;
+                border: 1px solid rgba(255,255,255,0.10);
+                margin-top: 10px;
+                text-align:center;
                 ">
-                    <h3 style="margin-top:0;">
-                        Vzájemné zápasy: {current_user} + {selected_partner} vs {selected_d_opp}
-                    </h3>
 
-                    <div style="
-                        display:flex;
-                        justify-content:center;
-                        gap:60px;
-                        margin-top:20px;
-                        font-size:18px;
-                    ">
+                <h3 style="margin-top:0;">
+                Vzájemné zápasy: {current_user} + {selected_partner} vs {selected_d_opp}
+                </h3>
 
-                        <div>
-                            <div style="color:gray;font-size:13px;">Zápasů</div>
-                            <div style="font-size:28px;"><b>{h2h_g}</b></div>
-                        </div>
+                <div style="
+                display:flex;
+                justify-content:center;
+                gap:60px;
+                margin-top:20px;
+                font-size:18px;
+                ">
 
-                        <div>
-                            <div style="color:gray;font-size:13px;">Výhry</div>
-                            <div style="font-size:28px;color:#2ecc71;"><b>{h2h_w}</b></div>
-                        </div>
+                <div>
+                <div style="color:gray;font-size:13px;">Zápasů</div>
+                <div style="font-size:28px;"><b>{h2h_g}</b></div>
+                </div>
 
-                        <div>
-                            <div style="color:gray;font-size:13px;">Prohry</div>
-                            <div style="font-size:28px;color:#e74c3c;"><b>{h2h_l}</b></div>
-                        </div>
+                <div>
+                <div style="color:gray;font-size:13px;">Výhry</div>
+                <div style="font-size:28px;color:#2ecc71;"><b>{h2h_w}</b></div>
+                </div>
 
-                    </div>
+                <div>
+                <div style="color:gray;font-size:13px;">Prohry</div>
+                <div style="font-size:28px;color:#e74c3c;"><b>{h2h_l}</b></div>
+                </div>
+
+                </div>
                 </div>
                 """, unsafe_allow_html=True)
 
