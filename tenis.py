@@ -591,7 +591,7 @@ def compute_player_stats_cached(df: pd.DataFrame, current_user: str):
             elif is_loss:
                 doubles_partners[partner]["l"] += 1
 
-            opp_key = f"{opp_team[0]} + {opp_team[1]}"
+            opp_key = " + ".join(sorted(opp_team))
             if opp_key not in doubles_opponents:
                 doubles_opponents[opp_key] = {"w": 0, "l": 0}
             if is_win:
