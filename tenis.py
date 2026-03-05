@@ -1436,12 +1436,118 @@ with tab_stats:
                         "Skóre": r["score"], "Sety": format_sets_display(r.get("sets", ""))
                     })
             
-            st.markdown("---")
-            selected_d_opp = st.selectbox("⚔️ Head-to-Head proti dvojici:", options=sorted(list(opponents_set)), index=None, placeholder="— všichni soupeři —", key="h2h_d_opp")
-            display_m = [m for m in partner_matches if m["Soupeři"] == selected_d_opp] if selected_d_opp else partner_matches
-            if display_m:
-                st.dataframe(pd.DataFrame(display_m).iloc[::-1].style.map(lambda x: 'color: #2ecc71; font-weight: bold;' if x == 'Výhra' else ('color: #e74c3c; font-weight: bold;' if x == 'Prohra' else ''), subset=['Výsledek']), use_container_width=True, hide_index=True)
+            partner_matches = []
+            opponents_set = set()
 
+            for _, r in DF_ALL.iterrows():
+                if "doubles" not in r["type"]:
+                    continue
+
+                ta = get_players(r["team_a"])
+                tb = get_players(r["team_b"])
+
+                we_ta = current_user in ta and selected_partner in ta
+                we_tb = current_user in tb and selected_partner in tb
+
+                if we_ta or we_tb:
+                    opps_str = " + ".join(sorted(tb if we_ta else ta))
+                    opponents_set.add(opps_str)
+
+                    is_win = (we_ta and r["winner"] == "A") or (we_tb and r["winner"] == "B")
+
+                    partner_matches.append({
+                        "Datum": r["date"],
+                        "Soupeři": opps_str,
+                        "Výsledek": "Výhra" if is_win else "Prohra",
+                        "Skóre": r["score"],
+                        "Sety": format_sets_display(r.get("sets", ""))
+                    })
+
+            st.markdown("---")
+
+            selected_d_opp = st.selectbox(
+                "⚔️ Head-to-Head proti dvojici:",
+                options=sorted(list(opponents_set)),
+                index=None,
+                placeholder="— vyber dvojici —",
+                key="h2h_d_opp"
+            )
+
+            # --- H2H BOX ---
+            if selected_d_opp:
+
+                h2h_w = 0
+                h2h_l = 0
+
+                for m in partner_matches:
+                    if m["Soupeři"] != selected_d_opp:
+                        continue
+
+                    if m["Výsledek"] == "Výhra":
+                        h2h_w += 1
+                    else:
+                        h2h_l += 1
+
+                h2h_g = h2h_w + h2h_l
+
+                st.markdown(f"""
+                <div style="
+                    background: rgba(255,255,255,0.05);
+                    padding: 22px;
+                    border-radius: 14px;
+                    border: 1px solid rgba(255,255,255,0.10);
+                    margin-top: 10px;
+                    text-align:center;
+                ">
+                    <h3 style="margin-top:0;">
+                        Vzájemné zápasy: {current_user} + {selected_partner} vs {selected_d_opp}
+                    </h3>
+
+                    <div style="
+                        display:flex;
+                        justify-content:center;
+                        gap:60px;
+                        margin-top:20px;
+                        font-size:18px;
+                    ">
+
+                        <div>
+                            <div style="color:gray;font-size:13px;">Zápasů</div>
+                            <div style="font-size:28px;"><b>{h2h_g}</b></div>
+                        </div>
+
+                        <div>
+                            <div style="color:gray;font-size:13px;">Výhry</div>
+                            <div style="font-size:28px;color:#2ecc71;"><b>{h2h_w}</b></div>
+                        </div>
+
+                        <div>
+                            <div style="color:gray;font-size:13px;">Prohry</div>
+                            <div style="font-size:28px;color:#e74c3c;"><b>{h2h_l}</b></div>
+                        </div>
+
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+
+            display_m = [
+                m for m in partner_matches
+                if m["Soupeři"] == selected_d_opp
+            ] if selected_d_opp else partner_matches
+
+
+            if display_m:
+                st.dataframe(
+                    pd.DataFrame(display_m).iloc[::-1].style.map(
+                        lambda x:
+                        'color: #2ecc71; font-weight: bold;' if x == 'Výhra'
+                        else ('color: #e74c3c; font-weight: bold;' if x == 'Prohra' else ''),
+                        subset=['Výsledek']
+                    ),
+                    use_container_width=True,
+                    hide_index=True
+                )
 # --- TAB 2: ZADÁNÍ ZÁPASU ---
 with tab2:
     if st.session_state.get("authentication_status"):
