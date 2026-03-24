@@ -63,23 +63,42 @@ def format_sets_display(sets_raw):
     return ", ".join(formatted)
 
 def normalize_sets_input(user_input):
-    """Zachová přesný formát s dvojtečkami, starý formát bez nich převede."""
+    """Převede zápis '6:3, 4:6, 7:5' i zkratky '3, -4, 5' vždy na čistý DB formát ('3,-4,5')."""
     if not user_input: return ""
     
-    if ":" in user_input:
-        parts = [p.strip() for p in user_input.split(",") if p.strip()]
-        return ", ".join(parts)
-        
-    s = user_input.replace(" ", ",")
-    parts = [p.strip() for p in s.split(",") if p.strip()]
+    # Rozdělíme vstup podle čárky a zahodíme mezery pro snazší zpracování
+    parts = [p.strip() for p in user_input.replace(" ", "").split(",") if p.strip()]
     
     final_loser_games = []
     for p in parts:
-        try:
-            final_loser_games.append(str(int(p)))
-        except:
-            continue
-            
+        if ":" in p:
+            try:
+                a_str, b_str = p.split(":")
+                a = int(a_str)
+                b = int(b_str)
+                # Pokud vyhrál Tým A (např. 6:3), uložíme jen gemy poraženého, tedy '3'
+                if a > b:
+                    final_loser_games.append(str(b))
+                # Pokud vyhrál Tým B (např. 4:6), uložíme to jako mínus, tedy '-4'
+                elif a < b:
+                    if a == 0:
+                        final_loser_games.append("-0") # Speciální případ pro 0:6
+                    else:
+                        final_loser_games.append(str(-a))
+                else:
+                    final_loser_games.append(str(a))
+            except:
+                continue
+        else:
+            # Uživatel zadal rovnou zkrácený formát (např. 3 nebo -4)
+            try:
+                if p == "-0":
+                    final_loser_games.append("-0")
+                else:
+                    final_loser_games.append(str(int(p)))
+            except:
+                continue
+                
     return ",".join(final_loser_games)
 
 # --- KONFIGURACE ---
