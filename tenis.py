@@ -40,6 +40,9 @@ def format_sets_display(sets_raw):
     if len(parts) > 0:
         # Logika pro 5,3,6 -> 7:5, 6:3, 7:6
         for p in parts:
+            if ":" in p:
+                formatted.append(p)
+                continue
             try:
                 # abs() zajistí, že i z -4 uděláme 4
                 val = abs(int(p.replace("-", "")))
