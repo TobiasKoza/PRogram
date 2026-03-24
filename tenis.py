@@ -25,67 +25,61 @@ def parse_ddmmyyyy(s: str):
         return None
 
 def format_sets_display(sets_raw):
-    """Převede '5,3,6' na '7:5, 6:3, 7:6'"""
+    """Převede starý formát s ohledem na to, kdo set vyhrál (podle znaménka mínus)."""
     if not sets_raw: return ""
     s = str(sets_raw).strip("'").strip()
     if not s: return ""
-    # Rozdělení podle čárky nebo dvojtečky (podpora obou formátů z DB)
-    parts = [p.strip() for p in s.replace(":", ",").replace(" ", ",").split(",") if p.strip()]
     
-    # Pokud je v seznamu sudý počet čísel a už vypadají jako 7,5,6,3...
-    # ale my chceme logiku: jedno číslo -> doplnění vítěze
+    if ":" in s:
+        return s
+        
+    parts = [p.strip() for p in s.replace(" ", ",").split(",") if p.strip()]
     formatted = []
     
-    # Detekce, zda jsou v DB už dvojice (7,5,6,3) nebo jen gemy poraženého (5,3,6)
-    if len(parts) > 0:
-        # Logika pro 5,3,6 -> 7:5, 6:3, 7:6
-        for p in parts:
-            if ":" in p:
-                formatted.append(p)
-                continue
-            try:
-                # abs() zajistí, že i z -4 uděláme 4
-                val = abs(int(p.replace("-", "")))
-                if val <= 4: formatted.append(f"6:{val}")
-                elif val >= 5: formatted.append(f"7:{val}")
-            except:
-                formatted.append(p)
+    for p in parts:
+        if p == "-0":
+            formatted.append("0:6")
+            continue
+        if p == "0":
+            formatted.append("6:0")
+            continue
+            
+        try:
+            v = int(p)
+            n = abs(v)
+            
+            if n == 6:
+                if v > 0: formatted.append("7:6")
+                else: formatted.append("6:7")
+            elif n >= 5:
+                if v > 0: formatted.append("7:5")
+                else: formatted.append("5:7")
+            else:
+                if v > 0: formatted.append(f"6:{n}")
+                else: formatted.append(f"{n}:6")
+        except:
+            formatted.append(p)
+            
     return ", ".join(formatted)
 
 def normalize_sets_input(user_input):
-    """Převede '7:5, 6:3' nebo '5,3' na čisté '5,3' pro uložení do DB"""
+    """Zachová přesný formát s dvojtečkami, starý formát bez nich převede."""
     if not user_input: return ""
-    # Nahradí dvojtečky a mezery čárkami
-    s = user_input.replace(":", ",").replace(" ", ",")
+    
+    if ":" in user_input:
+        parts = [p.strip() for p in user_input.split(",") if p.strip()]
+        return ", ".join(parts)
+        
+    s = user_input.replace(" ", ",")
     parts = [p.strip() for p in s.split(",") if p.strip()]
     
     final_loser_games = []
     for p in parts:
         try:
-            val = int(p)
-            # Pokud uživatel zadal 7,5,6,3... vezmeme jen ty menší z dvojic
-            # Pokud zadal jen 5,3,6... vezmeme vše
-            final_loser_games.append(str(val))
+            final_loser_games.append(str(int(p)))
         except:
             continue
             
-    # Pokud uživatel zadal full skóre (7,5, 6,3), vyfiltrujeme jen ty poražené gemy (5,3)
-    # pro zachování tvého DB standardu
-    if len(final_loser_games) >= 2:
-        res = []
-        i = 0
-        while i < len(final_loser_games):
-            g1 = int(final_loser_games[i])
-            if i + 1 < len(final_loser_games):
-                g2 = int(final_loser_games[i+1])
-                # Z dvojice (7,5) vezmeme to menší (5)
-                res.append(str(min(g1, g2)))
-                i += 2
-            else:
-                res.append(str(g1))
-                i += 1
-        return ",".join(res)
-    
     return ",".join(final_loser_games)
 
 # --- KONFIGURACE ---
